@@ -91,7 +91,8 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 
 | 内容 | メモ |
 |---|---|
-| 開発期間 | いつまでに仕上げるか |
+| 非機能要件 | 最小版に合わせて見直す |
+| 最小版の範囲 | [docs/mvp-scope.md](docs/mvp-scope.md) の確認 |
 
 ### 決定済み
 - 作り方は Web アプリ(PWA)。スマホのブラウザで開き、ホーム画面に追加して使う
@@ -111,14 +112,17 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 | [docs/screen-my-tasks.md](docs/screen-my-tasks.md) | 画面仕様 5: 自分のタスク |
 | [docs/screen-settings.md](docs/screen-settings.md) | 画面仕様 6: 設定(通知設定を含む) |
 | [docs/screen-achievements.md](docs/screen-achievements.md) | 画面仕様 7: 実績 |
+| [docs/mvp-scope.md](docs/mvp-scope.md) | 最小版(MVP)の範囲 |
 | [docs/screen-board.md](docs/screen-board.md) | 画面仕様 1: ボード画面 |
 | [docs/screen-card-detail.md](docs/screen-card-detail.md) | 画面仕様 2: カード詳細画面 |
 | [docs/er-diagram.md](docs/er-diagram.md) | ER図(データの設計) |
 
-## 10. 今後の進め方
+## 10. 課題の進め方
 
-1. 要件をそろえる(いまここ)
-2. 画面のスケッチを描く
-3. 技術を選び、データの形を決める
-4. 必須機能から順に作る
-5. テストして使ってみる
+開発期間に期限はなく、実装は研修で学びながら進めます。まず動く最小版を作ります。
+
+1. データの可視化(ER図)
+2. プロトタイプ作成(画面)
+3. 実装: Spring Boot プロジェクト作成
+4. 実装: DB構築と接続
+5. 実装: API実装(まず取得)、GitHub の設定
