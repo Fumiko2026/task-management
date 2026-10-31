@@ -126,3 +126,35 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 3. 実装: Spring Boot プロジェクト作成
 4. 実装: DB構築と接続
 5. 実装: API実装(まず取得)、GitHub の設定
+
+## 11. バックエンドの動かし方
+
+現在は DB を使わず、メモリ上のサンプルデータで動きます。
+
+### 必要なもの
+- Java 21(`java -version` で 21 と表示されること)
+- Maven は別に入れなくてよい(`backend/mvnw` が自動で用意する)
+
+### 起動
+```
+cd backend
+./mvnw spring-boot:run
+```
+初回は部品のダウンロードで数分かかります。`Started TaskManagementApplication` と表示されれば起動しています。止めるときは、ターミナルで `control` + `c`。
+
+### 動作の確認
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 起動の確認 | `curl http://localhost:8080/api/hello` | `ok` |
+| ボードの取得 | `curl http://localhost:8080/api/board` | ボードのデータ(JSON) |
+
+ブラウザで `http://localhost:8080/api/board` を開いても見られます。
+
+### テスト
+```
+cd backend
+./mvnw test
+```
+
+### 注意
+DB のパスワードなど、秘密の情報は GitHub に上げません。DB をつなぐ段階で、設定ファイルを分けて管理します。

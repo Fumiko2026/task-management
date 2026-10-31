@@ -176,3 +176,4 @@ erDiagram
 | 対応ブラウザ | Chrome と Safari |
 | 初期データ | 会員登録のときに自動で作る |
 | 確認の方法 | 手作業の確認表と、API の確認(Postman か curl) |
+| 開発環境(仮) | Java 21、Maven、Spring Boot 4.1.2。プロジェクトは `backend/`。研修の指定が違えば見直す |
