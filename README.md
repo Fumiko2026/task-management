@@ -129,15 +129,30 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 
 ## 11. バックエンドの動かし方
 
-現在は DB を使わず、メモリ上のサンプルデータで動きます。
+DB(PostgreSQL)には接続できますが、ボードのデータはまだメモリ上のサンプルデータです(DB 化は次のステップ)。
 
 ### 必要なもの
 - Java 21(`java -version` で 21 と表示されること)
 - Maven は別に入れなくてよい(`backend/mvnw` が自動で用意する)
+- Docker Desktop(PostgreSQL を動かすため。起動しておく)
+
+### DB(PostgreSQL)の起動
+初回だけ、設定ファイルを作ります。`.env` の `POSTGRES_PASSWORD` は自分用の値に変えてください(`.env` は GitHub に上がりません)。
+```
+cp .env.example .env
+```
+起動と停止は、プロジェクトの直下で行います。
+```
+docker compose up -d      # 起動(STATUS が healthy になれば準備完了。docker compose ps で確認)
+docker compose down       # 停止(データは残る)
+```
+データを消して最初からやり直すときだけ `docker compose down -v` を使います。
 
 ### 起動
+パスワードは環境変数で渡します(`.env` と同じ値)。
 ```
 cd backend
+export DB_PASSWORD=.env に書いたパスワード
 ./mvnw spring-boot:run
 ```
 初回は部品のダウンロードで数分かかります。`Started TaskManagementApplication` と表示されれば起動しています。止めるときは、ターミナルで `control` + `c`。
@@ -146,6 +161,7 @@ cd backend
 | 確認 | コマンド | 結果 |
 |---|---|---|
 | 起動の確認 | `curl http://localhost:8080/api/hello` | `ok` |
+| DB への接続の確認 | `curl http://localhost:8080/api/db-check` | `ok` |
 | ボードの取得 | `curl http://localhost:8080/api/board` | ボードのデータ(JSON) |
 
 ブラウザで `http://localhost:8080/api/board` を開いても見られます。
