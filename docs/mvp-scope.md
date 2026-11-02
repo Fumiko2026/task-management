@@ -117,9 +117,9 @@ erDiagram
 
 | 種類 | 呼び出し | 内容 |
 |---|---|---|
-| 取得 | `GET /api/board` | ボード全体(リストと、その中のカード) |
-| 取得 | `GET /api/cards/{id}` | カード1枚の詳細(チェックリスト含む) |
-| 取得 | `GET /api/tasks` | 自分のタスク(未完了を期限順) |
+| 取得(実装済み) | `GET /api/board` | ボード全体(リストと、その中のカード) |
+| 取得(実装済み) | `GET /api/cards/{id}` | カード1枚の詳細(チェックリスト含む)。無ければ 404 |
+| 取得(実装済み) | `GET /api/tasks` | 自分のタスク(未完了を期限順。期限なしは最後) |
 | 取得 | `GET /api/assignees` | 担当者の候補 |
 | 作成 | `POST /api/cards` | カードを作る |
 | 作成 | `POST /api/cards/{id}/checklist-items` | チェックリストの項目を足す |
@@ -178,4 +178,6 @@ erDiagram
 | 確認の方法 | 手作業の確認表と、API の確認(Postman か curl) |
 | テーブルの作り方 | SQL ファイル(`backend/src/main/resources/db/schema.sql`)。起動時に自動で実行する。定義は [table-definition.md](table-definition.md) |
 | 同じ名前の担当者 | 同じ利用者の中では、同じ名前を2回登録できない(既存の人を選ぶ。ER-03 の決着) |
+| 取得 API(ボード・カード・タスク) | DB のデータを返す。ログイン前は、ボードは id が最小の 1 つを返す(ログインを作る段階で user_id で絞る)。データが無いときは 500 ではなく 404 と理由を返す |
+| テストデータ | `db/seed.sql` をプロファイル `seed` で入れる(通常の起動では入らない)。起動のたびにデモ利用者のデータを作り直す |
 | 開発環境(仮) | Java 21、Maven、Spring Boot 4.1.2。プロジェクトは `backend/`。研修の指定が違えば見直す |

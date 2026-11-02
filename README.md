@@ -130,7 +130,7 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 
 ## 11. バックエンドの動かし方
 
-DB(PostgreSQL)に接続でき、アプリの起動時にテーブル(6 つ)が自動で作られます。ただし、ボードのデータはまだメモリ上のサンプルデータです(DB のデータを返すようにするのは次のステップ)。テーブルの内容は [docs/table-definition.md](docs/table-definition.md) を参照してください。
+DB(PostgreSQL)に接続でき、アプリの起動時にテーブル(6 つ)が自動で作られます。取得(Read)の API は、DB のデータを返します。テーブルの内容は [docs/table-definition.md](docs/table-definition.md) を参照してください。
 
 ### 必要なもの
 - Java 21(`java -version` で 21 と表示されること)
@@ -150,31 +150,48 @@ docker compose down       # 停止(データは残る)
 データを消して最初からやり直すときだけ `docker compose down -v` を使います。
 
 ### 起動
-パスワードは環境変数で渡します(`.env` と同じ値)。
+プロジェクトの直下で、スクリプトを実行します。DB のパスワードは `.env` から自動で読むので、設定は要りません。DB(Docker)が動いていないときは、やり方を案内して止まります。
 ```
-cd backend
-export DB_PASSWORD=.env に書いたパスワード
-./mvnw spring-boot:run
+./dev.sh run
 ```
+| コマンド | 内容 |
+|---|---|
+| `./dev.sh run` | アプリを起動(テストデータは入れない) |
+| `./dev.sh seed` | テストデータを入れて、アプリを起動 |
+| `./dev.sh test` | 自動テストを実行 |
+
+> スクリプトを使わずに、手で起動することもできます。`cd backend` → `export DB_PASSWORD=.env に書いたパスワード` → `./mvnw spring-boot:run`。`export` は、ターミナルを新しく開くたびに必要です。
+
 初回は部品のダウンロードで数分かかります。`Started TaskManagementApplication` と表示されれば起動しています。止めるときは、ターミナルで `control` + `c`。
 
 起動のたびに、`backend/src/main/resources/db/schema.sql` が実行され、テーブルが無ければ作られます(あるテーブルは変わりません)。
+
+### テストデータを入れて起動
+確認用のテストデータ(ボード 1 つ、リスト 4 つ、カード 5 枚、チェックリスト 5 項目)を DB に入れるには、`seed` を付けて起動します。
+```
+./dev.sh seed
+```
+- 通常の起動(`./dev.sh run`)では、テストデータは入りません。
+- 起動のたびに、デモ利用者(`demo@example.com`)のデータを作り直します。何度起動しても同じ結果になります(途中で変えたデータは元に戻ります)。
+- 中身は [backend/src/main/resources/db/seed.sql](backend/src/main/resources/db/seed.sql) です。期限は「いま」からの相対なので、いつ動かしても、超過・もうすぐ・通常・完了の状態がそろって見えます。
 
 ### 動作の確認
 | 確認 | コマンド | 結果 |
 |---|---|---|
 | 起動の確認 | `curl http://localhost:8080/api/hello` | `ok` |
 | DB への接続の確認 | `curl http://localhost:8080/api/db-check` | `ok` |
-| ボードの取得 | `curl http://localhost:8080/api/board` | ボードのデータ(JSON) |
+| ボードの取得 | `curl http://localhost:8080/api/board` | ボードのデータ(JSON)。ボードが無いときは 404 |
+| カード 1 枚の取得 | `curl http://localhost:8080/api/cards/1` | カードの詳細(チェックリストつき)。無いときは 404 |
+| 自分のタスク | `curl http://localhost:8080/api/tasks` | 未完了のカードを、期限が近い順に(期限なしは最後) |
 
-ブラウザで `http://localhost:8080/api/board` を開いても見られます。
+- カードの id は、ボードの応答の中の `cards[].id` で確かめられます(1 とは限りません)。
+- ブラウザで `http://localhost:8080/api/board` を開いても見られます。
+- **ログインはまだ無いため、ボードは「id が最小の 1 つ」を返します。** ログインを作る段階で、ログインした利用者のデータだけに絞ります。
 
 ### テスト
 テストは実際の DB につないで確かめます。先に DB を起動し(`docker compose up -d`)、`DB_PASSWORD` を設定してから実行します。テストで入れたデータは、終わると元に戻ります。
 ```
-cd backend
-export DB_PASSWORD=.env に書いたパスワード
-./mvnw test
+./dev.sh test
 ```
 
 ### 注意

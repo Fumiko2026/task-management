@@ -23,7 +23,8 @@ public class BoardService {
 	}
 
 	public BoardView getBoard() {
-		Board board = repository.findBoard();
+		Board board = repository.findBoard()
+				.orElseThrow(() -> new NotFoundException("ボードがありません"));
 		OffsetDateTime now = OffsetDateTime.now(clock);
 
 		List<BoardView.ListView> lists = IntStream.range(0, board.lists().size())
@@ -31,6 +32,21 @@ public class BoardService {
 				.toList();
 
 		return new BoardView(board.id(), board.name(), lists);
+	}
+
+	/** カード1枚の詳細。無ければ NotFoundException。 */
+	public BoardView.CardView getCard(long id) {
+		Card card = repository.findCard(id)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + id + ")"));
+		return toCardView(card, OffsetDateTime.now(clock));
+	}
+
+	/** 自分のタスク。未完了のカードを、期限が近い順に。 */
+	public List<BoardView.CardView> getMyTasks() {
+		OffsetDateTime now = OffsetDateTime.now(clock);
+		return repository.findOpenCardsOrderByDue().stream()
+				.map(card -> toCardView(card, now))
+				.toList();
 	}
 
 	private BoardView.ListView toListView(TaskList list, int position, OffsetDateTime now) {

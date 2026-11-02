@@ -2,16 +2,17 @@ package com.example.taskmanagement.board;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
-
-import org.springframework.stereotype.Repository;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * メモリ上のサンプルデータを返す。DB は使わない。
  * 期限は「いま」からの相対で作るので、いつ動かしても、
  * 超過・もうすぐ・通常・完了の4つの状態がそろって見える。
+ * アプリの本番では使わない(Spring の部品として登録していない)。DB なしの確認と、テストで使う。
  */
-@Repository
 public class InMemoryBoardRepository implements BoardRepository {
 
 	private final Clock clock;
@@ -21,7 +22,28 @@ public class InMemoryBoardRepository implements BoardRepository {
 	}
 
 	@Override
-	public Board findBoard() {
+	public Optional<Board> findBoard() {
+		return Optional.of(sampleBoard());
+	}
+
+	@Override
+	public Optional<Card> findCard(long id) {
+		return allCards().filter(card -> card.id() == id).findFirst();
+	}
+
+	@Override
+	public List<Card> findOpenCardsOrderByDue() {
+		return allCards()
+				.filter(card -> card.completedAt() == null)
+				.sorted(Comparator.comparing(Card::dueAt, Comparator.nullsLast(Comparator.naturalOrder())))
+				.toList();
+	}
+
+	private Stream<Card> allCards() {
+		return sampleBoard().lists().stream().flatMap(list -> list.cards().stream());
+	}
+
+	private Board sampleBoard() {
 		OffsetDateTime now = OffsetDateTime.now(clock);
 
 		Assignee me = new Assignee(1L, "自分", true);
