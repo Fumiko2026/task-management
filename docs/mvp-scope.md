@@ -176,4 +176,6 @@ erDiagram
 | 対応ブラウザ | Chrome と Safari |
 | 初期データ | 会員登録のときに自動で作る |
 | 確認の方法 | 手作業の確認表と、API の確認(Postman か curl) |
+| テーブルの作り方 | SQL ファイル(`backend/src/main/resources/db/schema.sql`)。起動時に自動で実行する。定義は [table-definition.md](table-definition.md) |
+| 同じ名前の担当者 | 同じ利用者の中では、同じ名前を2回登録できない(既存の人を選ぶ。ER-03 の決着) |
 | 開発環境(仮) | Java 21、Maven、Spring Boot 4.1.2。プロジェクトは `backend/`。研修の指定が違えば見直す |
