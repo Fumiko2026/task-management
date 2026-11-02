@@ -60,11 +60,12 @@
 
 ## コマンド
 ```
-docker compose up -d                         # DB を起動(プロジェクト直下)
-cd backend && export DB_PASSWORD=...         # .env と同じパスワード
-./mvnw spring-boot:run                       # アプリを起動
-./mvnw test                                  # テスト(DB の起動と DB_PASSWORD が必要)
+docker compose up -d     # DB を起動(プロジェクト直下)
+./dev.sh run             # アプリを起動(.env からパスワードを自動で読む)
+./dev.sh seed            # テストデータ(db/seed.sql)を入れて起動
+./dev.sh test            # テスト(DB の起動が必要)
 ```
+`dev.sh` を使わないときは、`cd backend` して `export DB_PASSWORD=...`(`.env` と同じ値)のうえ `./mvnw spring-boot:run` / `./mvnw test`。
 
 ## コードの決まり
 - 構成は Controller / Service / Repository に分ける。
