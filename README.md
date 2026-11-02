@@ -116,6 +116,7 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 | [docs/screen-board.md](docs/screen-board.md) | 画面仕様 1: ボード画面 |
 | [docs/screen-card-detail.md](docs/screen-card-detail.md) | 画面仕様 2: カード詳細画面 |
 | [docs/er-diagram.md](docs/er-diagram.md) | ER図(データの設計) |
+| [docs/table-definition.md](docs/table-definition.md) | テーブル定義書(最小版) |
 
 ## 10. 課題の進め方
 
@@ -129,7 +130,7 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 
 ## 11. バックエンドの動かし方
 
-DB(PostgreSQL)には接続できますが、ボードのデータはまだメモリ上のサンプルデータです(DB 化は次のステップ)。
+DB(PostgreSQL)に接続でき、アプリの起動時にテーブル(6 つ)が自動で作られます。ただし、ボードのデータはまだメモリ上のサンプルデータです(DB のデータを返すようにするのは次のステップ)。テーブルの内容は [docs/table-definition.md](docs/table-definition.md) を参照してください。
 
 ### 必要なもの
 - Java 21(`java -version` で 21 と表示されること)
@@ -157,6 +158,8 @@ export DB_PASSWORD=.env に書いたパスワード
 ```
 初回は部品のダウンロードで数分かかります。`Started TaskManagementApplication` と表示されれば起動しています。止めるときは、ターミナルで `control` + `c`。
 
+起動のたびに、`backend/src/main/resources/db/schema.sql` が実行され、テーブルが無ければ作られます(あるテーブルは変わりません)。
+
 ### 動作の確認
 | 確認 | コマンド | 結果 |
 |---|---|---|
@@ -167,8 +170,10 @@ export DB_PASSWORD=.env に書いたパスワード
 ブラウザで `http://localhost:8080/api/board` を開いても見られます。
 
 ### テスト
+テストは実際の DB につないで確かめます。先に DB を起動し(`docker compose up -d`)、`DB_PASSWORD` を設定してから実行します。テストで入れたデータは、終わると元に戻ります。
 ```
 cd backend
+export DB_PASSWORD=.env に書いたパスワード
 ./mvnw test
 ```
 
