@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # 開発用の起動スクリプト。.env からパスワードを自動で読むので、export は不要。
 #
-#   ./dev.sh run    アプリを起動(テストデータは入れない)
-#   ./dev.sh seed   テストデータ(backend/src/main/resources/db/seed.sql)を入れて、アプリを起動
-#   ./dev.sh test   自動テストを実行
+#   ./dev.sh run         バックエンドを起動(テストデータは入れない)
+#   ./dev.sh seed        テストデータ(backend/src/main/resources/db/seed.sql)を入れて、バックエンドを起動
+#   ./dev.sh test        バックエンドの自動テストを実行
+#   ./dev.sh front       フロントエンド(React)を起動。ブラウザで http://localhost:5173
+#   ./dev.sh front-test  フロントエンドの自動テストを実行
+#   ./dev.sh free-port 8080   そのポートを使っているプロセスを止める(8080 と 5173 だけ)
 #
 # どのフォルダから実行しても動く。止めるときは、ターミナルで control + c。
+# バックエンド(8080)とフロントエンド(5173)は、ポートが他のプロセスに使われていたら、
+# そのプロセスを止めてから、標準のポートで起動する(別のポートへは逃げない)。
 
 set -euo pipefail
 
@@ -16,6 +21,37 @@ fail() {
 	echo "エラー: $1" >&2
 	exit 1
 }
+
+# ポートの競合を解消する。そのポートを使っているプロセスを止めて、標準のポートで動けるようにする。
+# 別のポートへ逃げることはしない。止める対象は、8080(バックエンド)と 5173(フロントエンド)だけ。
+free_port() {
+	"$ROOT/scripts/free-port.sh" "$1"
+}
+
+# フロントエンド(React)の操作。DB やパスワードは要らないので、先に処理する。
+front_setup() {
+	command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 \
+		|| fail "Node.js が入っていません。  brew install node  を実行してから、もう一度実行してください。"
+	cd "$ROOT/frontend"
+	[ -d node_modules ] || npm install
+}
+case "${1:-}" in
+	front)
+		front_setup
+		free_port 5173
+		echo "ブラウザで http://localhost:5173 を開いてください(止めるときは control + c)。"
+		echo "先に、別のターミナルで  ./dev.sh seed  を実行して、バックエンドを動かしておいてください。"
+		exec npm run dev
+		;;
+	front-test)
+		front_setup
+		exec npm test
+		;;
+	free-port)
+		free_port "${2:-}"
+		exit 0
+		;;
+esac
 
 [ -f "$ENV_FILE" ] || fail ".env がありません。プロジェクトの直下で  cp .env.example .env  を実行してください。"
 
@@ -46,19 +82,24 @@ cd "$ROOT/backend"
 
 case "${1:-}" in
 	run)
+		free_port 8080
 		exec ./mvnw spring-boot:run
 		;;
 	seed)
+		free_port 8080
 		exec ./mvnw spring-boot:run -Dspring-boot.run.profiles=seed
 		;;
 	test)
 		exec ./mvnw test
 		;;
 	*)
-		echo "使い方:  ./dev.sh run | seed | test"
-		echo "  run   アプリを起動(テストデータは入れない)"
-		echo "  seed  テストデータを入れて、アプリを起動"
-		echo "  test  自動テストを実行"
+		echo "使い方:  ./dev.sh run | seed | test | front | front-test | free-port <ポート>"
+		echo "  run         バックエンドを起動(テストデータは入れない)。8080 が使われていれば、止めてから起動"
+		echo "  seed        テストデータを入れて、バックエンドを起動。8080 が使われていれば、止めてから起動"
+		echo "  test        バックエンドの自動テストを実行"
+		echo "  front       フロントエンド(React)を起動。http://localhost:5173。5173 が使われていれば、止めてから起動"
+		echo "  front-test  フロントエンドの自動テストを実行"
+		echo "  free-port   ポート(8080 か 5173)を使っているプロセスを止める"
 		exit 1
 		;;
 esac

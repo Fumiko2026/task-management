@@ -5,6 +5,7 @@
 ## プロジェクトの概要
 - Trello 風のタスク管理アプリ(WEB スクールの課題)。個人利用。
 - バックエンド: Spring Boot 4.1.2 / Java 21 / Maven(`backend/`)。DB: PostgreSQL 17(Docker)。
+- フロントエンド: React 19 / TypeScript / Vite(`frontend/`)。テストは Vitest + Testing Library。開発中は、Vite が `/api` をバックエンド(8080)へ中継する(CORS の設定は不要)。
 - 設計書は `docs/` と `requirements.md`。最小版の範囲は `docs/mvp-scope.md`。
 - 利用者は初心者。**説明は日本語で、やさしく、一つずつ**行う。専門用語には一言の説明をつける。
 
@@ -63,8 +64,21 @@
 docker compose up -d     # DB を起動(プロジェクト直下)
 ./dev.sh run             # アプリを起動(.env からパスワードを自動で読む)
 ./dev.sh seed            # テストデータ(db/seed.sql)を入れて起動
-./dev.sh test            # テスト(DB の起動が必要)
+./dev.sh test            # バックエンドのテスト(DB の起動が必要)
+./dev.sh front           # フロントエンドを起動(http://localhost:5173。先に ./dev.sh seed でバックエンドを動かす)
+./dev.sh front-test      # フロントエンドのテスト
 ```
+フロントエンドの確認は、`frontend/` で `npm test`、`npm run lint`、`npm run build`(型の検査を含む)が、すべて通ること。
+
+## ポートの競合(必ず守る)
+サーバーは、**標準のポートで動かす**。バックエンドは **8080**、フロントエンドは **5173**。
+
+- 起動しようとしたポートが、他のプロセスに使われていたら(`Port 8080 was already in use`、`Port 5173 is already in use`、`EADDRINUSE` など)、**そのポートを使っているプロセスを必ず停止してから、標準のポートで起動する**。
+- **別のポートへ逃げない。** `--server.port` や `--port` の指定、設定ファイルのポートの書き換えは行わない(画面の確認先、バックエンドへの中継先、README の案内が、この番号に決まっているため)。Vite も、`strictPort` で、5173 が使えないときは別のポートへ移らず、エラーで止まる。
+- 停止は、`./dev.sh free-port 8080` / `./dev.sh free-port 5173`(中身は `scripts/free-port.sh`)で行う。`./dev.sh run` / `seed` / `front` は、起動の前に、自動でこの停止を行う。
+- 止めてよいのは、**8080 と 5173 で待ち受けているプロセスだけ**。DB(5432)など、他のポートは止めずに、利用者に状況を伝えて相談する。`pkill java` のように、名前で広く止めない。
+- 何を止めたかを、利用者に報告する(「ポート 8080 を、○○が使っていたので止めました」)。
+- 手順の詳細は、スキル `free-port`(`.claude/skills/free-port/SKILL.md`)を使う。
 `dev.sh` を使わないときは、`cd backend` して `export DB_PASSWORD=...`(`.env` と同じ値)のうえ `./mvnw spring-boot:run` / `./mvnw test`。
 
 ## コードの決まり
@@ -72,4 +86,6 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 - 日時は日本時間(Asia/Tokyo)。DB の日時は TIMESTAMPTZ。
 - JSON の応答は UTF-8 を明示する(文字化け防止)。
 - 他の人のデータは見せない(取得は、ログインした利用者の ID で絞る)。
+- フロントエンドの API の型は `frontend/src/api/types.ts` に置く。バックエンドの `BoardView.java` などを変えたら、ここも直す。
+- 画面は、色だけで状態を伝えない(アイコンと文字も出す)。押せる部品は 44px 以上。まだ動かない部品は、画面に出さない。
 - テーブルの変更は `backend/src/main/resources/db/schema.sql`。変更するときは `docs/table-definition.md` も更新する。
