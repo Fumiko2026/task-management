@@ -4,9 +4,9 @@ import { BoardSkeleton } from './BoardSkeleton'
 import { ErrorMessage } from './ErrorMessage'
 import { ListColumn } from './ListColumn'
 
-/** ボード画面(画面仕様 S-03)。API から読み込んだボードを、リストとカードで見せる。読み取り専用。 */
+/** ボード画面(画面仕様 S-03)。API から読み込んだボードを、リストとカードで見せる。カードを追加できる。 */
 export function BoardPage() {
-  const { state, reload } = useBoard()
+  const { state, reload, addCard } = useBoard()
 
   switch (state.status) {
     case 'loading':
@@ -44,7 +44,7 @@ export function BoardPage() {
           {noCards && <p className="board-guide">最初のカードを追加しましょう</p>}
           <div className="lists">
             {board.lists.map((list) => (
-              <ListColumn key={list.id} list={list} />
+              <ListColumn key={list.id} list={list} onCardAdded={(card) => addCard(list.id, card)} />
             ))}
           </div>
         </div>

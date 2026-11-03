@@ -1,6 +1,7 @@
 package com.example.taskmanagement.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -90,6 +91,51 @@ class BoardServiceTest {
 	void 完了済みなら期限を過ぎていても_完了() {
 		assertThat(service.dueStatusOf(cardDue(now.minusDays(3), now.minusDays(1)), now))
 				.isEqualTo(DueStatus.COMPLETED);
+	}
+
+	// ---- カードの新規作成の、入力の確認(DB には届かない前に断る) ----
+	// サンプルのリスト: 1=未着手 2=進行中 3=レビュー 4=完了(完了リスト)
+
+	@Test
+	void 新規作成_リストの指定が無いと_400() {
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(null, "請求書を送る")))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("リストを指定してください");
+	}
+
+	@Test
+	void 新規作成_タイトルが_null_空_空白だけ_全角空白だけ_だと400() {
+		for (String title : new String[] { null, "", "   ", "\u3000\u3000" }) {
+			assertThatThrownBy(() -> service.createCard(new CreateCardRequest(1L, title)))
+					.as("title=%s", title)
+					.isInstanceOf(BadRequestException.class)
+					.hasMessage("タイトルを入力してください");
+		}
+	}
+
+	@Test
+	void 新規作成_タイトルが101文字だと400_絵文字は1文字と数える() {
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(1L, "あ".repeat(101))))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("タイトルは100文字までです");
+
+		// 絵文字は Java の String では2つ分だが、DB と同じく1文字と数える。101個の絵文字は、断られる
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(1L, "😀".repeat(101))))
+				.isInstanceOf(BadRequestException.class);
+	}
+
+	@Test
+	void 新規作成_リストが無いと404() {
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(999L, "請求書を送る")))
+				.isInstanceOf(NotFoundException.class)
+				.hasMessageContaining("リストが見つかりません");
+	}
+
+	@Test
+	void 新規作成_完了のリストには追加できない() {
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(4L, "請求書を送る")))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("完了のリストには、カードを追加できません");
 	}
 
 	private CardView card(BoardView board, String title) {

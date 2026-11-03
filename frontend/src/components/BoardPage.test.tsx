@@ -2,16 +2,8 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BoardView } from '../api/types'
-import { makeBoard, makeList } from '../test/fixtures'
+import { jsonResponse, makeBoard, makeCard, makeList } from '../test/fixtures'
 import { BoardPage } from './BoardPage'
-
-/** API の応答(JSON)を作る。 */
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json;charset=UTF-8' },
-  })
-}
 
 describe('BoardPage', () => {
   it('読み込み中は「読み込み中」を出し、読み込めたらボードを出す', async () => {
@@ -111,5 +103,82 @@ describe('BoardPage', () => {
 
     expect(await screen.findByText('ボードがありません')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  describe('カードの追加', () => {
+    const addLabel = '＋ カードを追加'
+
+    it('「完了」のリストには、「カードを追加」を出さない', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(makeBoard())))
+
+      render(<BoardPage />)
+
+      for (const name of ['未着手', '進行中', 'レビュー']) {
+        const region = within(await screen.findByRole('region', { name }))
+        expect(region.getByRole('button', { name: addLabel })).toBeInTheDocument()
+      }
+      const done = within(screen.getByRole('region', { name: '完了' }))
+      expect(done.queryByRole('button', { name: addLabel })).not.toBeInTheDocument()
+    })
+
+    it('追加すると、そのリストの最後にカードが増え、件数も増える。続けて追加できる', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(makeBoard()))
+        .mockResolvedValueOnce(jsonResponse(makeCard({ id: 10, title: '請求書を送る' }), 201))
+        .mockResolvedValueOnce(jsonResponse(makeCard({ id: 11, title: '見積書を確認する' }), 201))
+      vi.stubGlobal('fetch', fetchMock)
+      const user = userEvent.setup()
+
+      render(<BoardPage />)
+      const todo = within(await screen.findByRole('region', { name: '未着手' }))
+      expect(todo.getByLabelText('2件')).toBeInTheDocument()
+
+      await user.click(todo.getByRole('button', { name: addLabel }))
+      await user.type(todo.getByLabelText('カードのタイトル'), '請求書を送る')
+      await user.click(todo.getByRole('button', { name: '追加' }))
+
+      expect(await todo.findByRole('heading', { name: '請求書を送る' })).toBeInTheDocument()
+      expect(todo.getByLabelText('3件')).toBeInTheDocument()
+
+      // 入力欄は開いたまま、空になっていて、続けて追加できる
+      const input = todo.getByLabelText('カードのタイトル')
+      expect(input).toHaveValue('')
+      await user.type(input, '見積書を確認する{Enter}')
+
+      expect(await todo.findByRole('heading', { name: '見積書を確認する' })).toBeInTheDocument()
+      expect(todo.getByLabelText('4件')).toBeInTheDocument()
+      // 最後に足したカードが、いちばん下にある
+      const titles = todo.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+      expect(titles.slice(-2)).toEqual(['請求書を送る', '見積書を確認する'])
+
+      // 送った内容(どのリストに、何というタイトルで)
+      expect(fetchMock.mock.calls[1][0]).toBe('/api/cards')
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({ listId: 1, title: '請求書を送る' })
+      // 他のリストは変わらない
+      expect(within(screen.getByRole('region', { name: '進行中' })).getByLabelText('1件')).toBeInTheDocument()
+    })
+
+    it('追加に失敗したら、理由を出し、カードは増えず、入力した文字は残る', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(jsonResponse(makeBoard()))
+          .mockResolvedValueOnce(jsonResponse({ message: 'リストが見つかりません(id=1)' }, 404)),
+      )
+      const user = userEvent.setup()
+
+      render(<BoardPage />)
+      const todo = within(await screen.findByRole('region', { name: '未着手' }))
+      await user.click(todo.getByRole('button', { name: addLabel }))
+      await user.type(todo.getByLabelText('カードのタイトル'), '請求書を送る')
+      await user.click(todo.getByRole('button', { name: '追加' }))
+
+      expect(await todo.findByRole('alert')).toHaveTextContent('保存できませんでした。リストが見つかりません(id=1)')
+      expect(todo.getByLabelText('カードのタイトル')).toHaveValue('請求書を送る')
+      expect(todo.getByLabelText('2件')).toBeInTheDocument()
+      expect(todo.queryByRole('heading', { name: '請求書を送る' })).not.toBeInTheDocument()
+    })
   })
 })

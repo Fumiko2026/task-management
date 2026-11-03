@@ -55,3 +55,9 @@ export interface BoardView {
   name: string
   lists: ListView[]
 }
+
+/** POST /api/cards に送る内容。カードを入れるリストの id と、タイトル。 */
+export interface CreateCardRequest {
+  listId: number
+  title: string
+}

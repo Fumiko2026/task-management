@@ -14,6 +14,9 @@ public class BoardService {
 	/** 期限まで、この時間以内になったら「もうすぐ」と表示する。 */
 	private static final long DUE_SOON_HOURS = 24;
 
+	/** カードのタイトルの長さの上限(要件 NM-06。DB の定義と同じ)。 */
+	static final int TITLE_MAX_LENGTH = 100;
+
 	private final BoardRepository repository;
 	private final Clock clock;
 
@@ -39,6 +42,35 @@ public class BoardService {
 		Card card = repository.findCard(id)
 				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + id + ")"));
 		return toCardView(card, OffsetDateTime.now(clock));
+	}
+
+	/**
+	 * カードを新しく作る。入力の確認(NM-06)をしてから登録し、作ったカードを返す。
+	 *   - リストの指定が無い、タイトルが空(空白だけを含む)、タイトルが100文字を超える → BadRequestException(400)
+	 *   - 指定のリストが無い → NotFoundException(404)
+	 *   - 「完了」のリスト → BadRequestException(400)(完了のリストにあるカードは、完了日時が記録されたカードのため)
+	 */
+	public BoardView.CardView createCard(CreateCardRequest request) {
+		if (request.listId() == null) {
+			throw new BadRequestException("リストを指定してください");
+		}
+		String title = request.title() == null ? "" : request.title().strip();
+		if (title.isEmpty()) {
+			throw new BadRequestException("タイトルを入力してください");
+		}
+		// 文字数は、DB(char_length)と同じ数え方にする(絵文字などの2つ分の文字も、1文字と数える)
+		if (title.codePointCount(0, title.length()) > TITLE_MAX_LENGTH) {
+			throw new BadRequestException("タイトルは" + TITLE_MAX_LENGTH + "文字までです");
+		}
+
+		ListSummary list = repository.findList(request.listId())
+				.orElseThrow(() -> new NotFoundException("リストが見つかりません(id=" + request.listId() + ")"));
+		if (list.doneList()) {
+			throw new BadRequestException("完了のリストには、カードを追加できません");
+		}
+
+		Card created = repository.createCard(list.id(), title);
+		return toCardView(created, OffsetDateTime.now(clock));
 	}
 
 	/** 自分のタスク。未完了のカードを、期限が近い順に。 */

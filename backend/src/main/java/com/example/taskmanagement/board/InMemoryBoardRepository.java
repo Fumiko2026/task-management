@@ -39,6 +39,19 @@ public class InMemoryBoardRepository implements BoardRepository {
 				.toList();
 	}
 
+	@Override
+	public Optional<ListSummary> findList(long id) {
+		return sampleBoard().lists().stream()
+				.filter(list -> list.id() == id)
+				.map(list -> new ListSummary(list.id(), list.name(), list.doneList()))
+				.findFirst();
+	}
+
+	@Override
+	public Card createCard(long listId, String title) {
+		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの作成に対応していません");
+	}
+
 	private Stream<Card> allCards() {
 		return sampleBoard().lists().stream().flatMap(list -> list.cards().stream());
 	}

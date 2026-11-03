@@ -1,20 +1,20 @@
 package com.example.taskmanagement.board;
 
+import java.net.URI;
 import java.util.List;
-import java.util.Map;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * ボード・カード・タスクの取得 API の入口。
+ * ボード・カード・タスクの API の入口。
  * ブラウザが文字コードを取り違えて文字化けしないよう、どの応答も UTF-8 であることを明示する。
+ * エラー(404 / 400)の返し方は、ApiExceptionHandler にまとめてある。
  */
 @RestController
 @RequestMapping("/api")
@@ -46,12 +46,15 @@ public class BoardController {
 		return boardService.getMyTasks();
 	}
 
-	/** データが無いときは、500(アプリの故障)ではなく、404(見つからない)と理由を返す。 */
-	@ExceptionHandler(NotFoundException.class)
-	public ResponseEntity<Map<String, String>> handleNotFound(NotFoundException e) {
-		return ResponseEntity.status(HttpStatus.NOT_FOUND)
-				.contentType(MediaType.parseMediaType(JSON_UTF8))
-				.body(Map.of("message", e.getMessage()));
+	/**
+	 * POST /api/cards : カードを新しく作る。本文は {"listId": 1, "title": "請求書を送る"}。
+	 * 作れたら 201(Created)と、作ったカードを返す。Location に、そのカードの取得先を入れる。
+	 * 入力が正しくなければ 400、リストが無ければ 404(どちらも理由つき)。
+	 */
+	@PostMapping(value = "/cards", produces = JSON_UTF8)
+	public ResponseEntity<BoardView.CardView> createCard(@RequestBody CreateCardRequest request) {
+		BoardView.CardView created = boardService.createCard(request);
+		return ResponseEntity.created(URI.create("/api/cards/" + created.id())).body(created);
 	}
 
 }
