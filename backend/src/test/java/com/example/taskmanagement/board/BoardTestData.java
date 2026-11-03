@@ -12,7 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 final class BoardTestData {
 
 	/** 入れたデータの id。 */
-	record Ids(long boardId, long todoListId, long doneListId,
+	record Ids(long userId, long boardId, long todoListId, long doneListId,
 			long estimateCardId, long noDueCardId, long laterCardId, long doneCardId) {
 	}
 
@@ -53,7 +53,13 @@ final class BoardTestData {
 		jdbc.update("INSERT INTO checklist_items (card_id, text, is_done, position) VALUES (?, '上司に確認する', FALSE, 2)", estimate);
 		jdbc.update("INSERT INTO checklist_items (card_id, text, is_done, position) VALUES (?, '金額を計算する', TRUE, 1)", estimate);
 
-		return new Ids(boardId, todoListId, doneListId, estimate, noDue, later, done);
+		return new Ids(userId, boardId, todoListId, doneListId, estimate, noDue, later, done);
+	}
+
+	/** 持ち主の「自分」の担当者を作って、その id を返す(カード作成で、担当者が「自分」になることの確認用)。 */
+	static long insertSelfAssignee(JdbcTemplate jdbc, long userId) {
+		return jdbc.queryForObject(
+				"INSERT INTO assignees (user_id, name, is_self) VALUES (?, '自分', TRUE) RETURNING id", Long.class, userId);
 	}
 
 	private static long card(JdbcTemplate jdbc, long listId, Long assigneeId, String title, String description,

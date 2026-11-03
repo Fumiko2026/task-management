@@ -1,4 +1,4 @@
-import type { BoardView } from './types'
+import type { BoardView, CardView, CreateCardRequest } from './types'
 
 /** API の呼び出しに失敗したとき。status は HTTP の番号(通信そのものが失敗したときは 0)。 */
 export class ApiError extends Error {
@@ -25,6 +25,29 @@ export async function fetchBoard(): Promise<BoardView> {
     throw new ApiError(response.status, await readMessage(response))
   }
   return (await response.json()) as BoardView
+}
+
+/**
+ * POST /api/cards : カードを新しく作る。作れたら、作ったカードを返す。
+ * 失敗(入力が正しくない 400、リストが無い 404 など)は、API の理由を持つ ApiError にする。
+ */
+export async function createCard(listId: number, title: string): Promise<CardView> {
+  const request: CreateCardRequest = { listId, title }
+  let response: Response
+  try {
+    response = await fetch('/api/cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
 }
 
 /** エラー応答の {"message": "..."} から理由を取り出す。読めなければ、番号だけの文にする。 */

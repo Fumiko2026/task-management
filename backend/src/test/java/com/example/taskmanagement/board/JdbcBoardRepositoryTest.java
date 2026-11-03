@@ -103,4 +103,76 @@ class JdbcBoardRepositoryTest {
 		assertThat(tasks).extracting(Card::title).containsExactly("見積書を作る", "資料を送る", "資料をまとめる");
 	}
 
+	// ---- カードの新規作成 ----
+
+	@Test
+	void リストの基本情報を取り出せる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		assertThat(repository.findList(ids.todoListId())).contains(new ListSummary(ids.todoListId(), "未着手", false));
+		assertThat(repository.findList(ids.doneListId()).orElseThrow().doneList()).isTrue();
+		assertThat(repository.findList(-1)).isEmpty();
+	}
+
+	@Test
+	void カードを作ると_リストの最後に入り_説明は空_期限と完了は無し() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		Card created = repository.createCard(ids.todoListId(), "請求書を送る");
+
+		assertThat(created.title()).isEqualTo("請求書を送る");
+		assertThat(created.description()).isEmpty();
+		assertThat(created.dueAt()).isNull();
+		assertThat(created.completedAt()).isNull();
+		assertThat(created.checklist()).isEmpty();
+		// 未着手には3枚(position 1〜3)あるので、4番目になる
+		assertThat(jdbc.queryForObject("SELECT position FROM cards WHERE id = ?", Integer.class, created.id()))
+				.isEqualTo(4);
+		assertThat(repository.findBoard().orElseThrow().lists().get(0).cards()).extracting(Card::title)
+				.containsExactly("見積書を作る", "資料をまとめる", "資料を送る", "請求書を送る");
+	}
+
+	@Test
+	void 空のリストに作ると_並び順は1() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long emptyListId = jdbc.queryForObject(
+				"INSERT INTO lists (board_id, name, position) VALUES (?, '進行中', 3) RETURNING id",
+				Long.class, ids.boardId());
+
+		Card created = repository.createCard(emptyListId, "最初のカード");
+
+		assertThat(jdbc.queryForObject("SELECT position FROM cards WHERE id = ?", Integer.class, created.id()))
+				.isEqualTo(1);
+	}
+
+	@Test
+	void 持ち主に_自分_の担当者がいれば_担当者は自分になる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		BoardTestData.insertSelfAssignee(jdbc, ids.userId());
+
+		Card created = repository.createCard(ids.todoListId(), "請求書を送る");
+
+		assertThat(created.assignee()).isNotNull();
+		assertThat(created.assignee().name()).isEqualTo("自分");
+		assertThat(created.assignee().self()).isTrue();
+	}
+
+	@Test
+	void 持ち主に_自分_の担当者がいなければ_担当者なし() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc); // 田中さん(依頼先)だけで、「自分」はいない
+
+		Card created = repository.createCard(ids.todoListId(), "請求書を送る");
+
+		assertThat(created.assignee()).isNull();
+	}
+
+	@Test
+	void 日本語と絵文字のタイトルが_そのまま保存される() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		Card created = repository.createCard(ids.todoListId(), "部長に報告します😀");
+
+		assertThat(repository.findCard(created.id()).orElseThrow().title()).isEqualTo("部長に報告します😀");
+	}
+
 }

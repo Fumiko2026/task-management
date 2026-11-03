@@ -245,6 +245,83 @@ body {
   accent-color: var(--accent);
 }
 
+/* ---- カードを追加 ---- */
+
+.add-card-button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text-sub);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.add-card-button:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.add-card-button:focus-visible,
+.add-card-input:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.add-card-form {
+  margin-top: 8px;
+}
+
+.add-card-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  /* 16px 未満だと、iPhone の Safari が、入力のたびに画面を拡大してしまう */
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.add-card-actions {
+  display: flex;
+  /* 狭いリストでは、入りきらないボタンを、次の行へ送る(文字を縦に折らない) */
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-card-actions .button {
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.form-error {
+  margin: 6px 0 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--due-overdue-text);
+}
+
+.button.button--secondary {
+  /* .button より後ろに書かれていても、こちらが優先されるよう、2つ並べて指定する */
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.button:disabled {
+  /* 押せないことが、色の薄さだけでなく、カーソルでも伝わるようにする */
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ---- 読み込み中・失敗・ボードなし ---- */
 
 .skeleton {

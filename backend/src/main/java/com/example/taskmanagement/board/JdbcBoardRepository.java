@@ -72,6 +72,34 @@ public class JdbcBoardRepository implements BoardRepository {
 				.toList();
 	}
 
+	@Override
+	public Optional<ListSummary> findList(long id) {
+		return jdbc.query("SELECT id, name, is_done_list FROM lists WHERE id = ?",
+				(rs, rowNum) -> new ListSummary(rs.getLong("id"), rs.getString("name"), rs.getBoolean("is_done_list")),
+				id).stream().findFirst();
+	}
+
+	@Override
+	public Card createCard(long listId, String title) {
+		// 1 回の INSERT で、担当者(持ち主の「自分」)と、並び順(そのリストの最後)も決める。
+		// 「自分」がいなければ、assignee_id は NULL(担当者なし)になる。
+		long id = jdbc.queryForObject("""
+				INSERT INTO cards (list_id, assignee_id, title, description, position)
+				VALUES (
+				    ?,
+				    (SELECT a.id
+				       FROM lists l
+				       JOIN boards b ON b.id = l.board_id
+				       JOIN assignees a ON a.user_id = b.user_id AND a.is_self
+				      WHERE l.id = ?),
+				    ?,
+				    '',
+				    (SELECT COALESCE(MAX(position), 0) + 1 FROM cards WHERE list_id = ?))
+				RETURNING id
+				""", Long.class, listId, listId, title, listId);
+		return findCard(id).orElseThrow();
+	}
+
 	// ---- 内部 ----
 
 	private record ListHeader(String name, boolean doneList) {

@@ -94,3 +94,11 @@ export function makeBoard(): BoardView {
     ],
   }
 }
+
+/** API の応答(JSON)を作る。fetch の差し替えに使う。 */
+export function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+  })
+}

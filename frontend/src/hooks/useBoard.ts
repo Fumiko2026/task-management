@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, fetchBoard } from '../api/client'
-import type { BoardView } from '../api/types'
+import type { BoardView, CardView } from '../api/types'
 
 /** ボードの読み込みの状態。画面は、この状態に合わせて表示を切り替える。 */
 export type BoardState =
@@ -11,7 +11,7 @@ export type BoardState =
   /** 読み込めなかった */
   | { status: 'error'; message: string }
 
-/** ボードを API から読み込む。reload() で、もう一度読み込む。 */
+/** ボードを API から読み込む。reload() で、もう一度読み込む。addCard() で、作ったカードを画面に足す。 */
 export function useBoard() {
   const [state, setState] = useState<BoardState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -43,5 +43,19 @@ export function useBoard() {
     setAttempt((n) => n + 1)
   }, [])
 
-  return { state, reload }
+  /**
+   * 作ったカードを、そのリストの最後に足す(ボード全体を読み込み直さない)。
+   * 並び順は、API が「リストの最後」に作るので、画面でも最後に足せば同じになる。
+   */
+  const addCard = useCallback((listId: number, card: CardView) => {
+    setState((current) => {
+      if (current.status !== 'ready') return current
+      const lists = current.board.lists.map((list) =>
+        list.id === listId ? { ...list, cards: [...list.cards, card], cardCount: list.cardCount + 1 } : list,
+      )
+      return { status: 'ready', board: { ...current.board, lists } }
+    })
+  }, [])
+
+  return { state, reload, addCard }
 }
