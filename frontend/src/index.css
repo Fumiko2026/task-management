@@ -1,0 +1,332 @@
+/* ボード画面の見た目。
+   - 色だけで状態を伝えない(N-11)。期限は、色に加えて、アイコンと文字も出している。
+   - 文字と背景のコントラスト比は 4.5:1 以上(N-02, N-13)。
+   - スマホ: リストの幅は画面幅の約45%(画面仕様 §3-③)。パソコン: 幅 768px 以上で、リストを 280px の固定にして並べる。 */
+
+:root {
+  color-scheme: light;
+
+  --bg-page: #f1f5f9;
+  --bg-list: #e2e8f0;
+  --bg-card: #ffffff;
+  --text: #0f172a;
+  --text-sub: #475569;
+  --border: #cbd5e1;
+
+  /* 期限の状態。文字の色と背景は、どれも 4.5:1 以上 */
+  --due-normal-text: #475569;
+  --due-normal-bg: #f1f5f9;
+  --due-soon-text: #7a4b00;
+  --due-soon-bg: #fff4cc;
+  --due-overdue-text: #b42318;
+  --due-overdue-bg: #fee4e2;
+  --due-done-text: #166534;
+  --due-done-bg: #dcfce7;
+  --warn-text: #9a3412;
+
+  --accent: #1d4ed8;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-page);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+/* ---- 画面全体 ---- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.board-header {
+  flex: none;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.board-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  /* 長いときは、末尾を「…」で省略する */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.board-guide {
+  flex: none;
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--text-sub);
+}
+
+/* ---- リスト(横に並べる) ---- */
+
+.lists {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.list {
+  /* スマホ: 画面幅の約45%。狭すぎないよう、下限 160px */
+  flex: 0 0 45%;
+  min-width: 160px;
+  /* リストの中は縦にスクロールする */
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  background: var(--bg-list);
+  border-radius: 8px;
+  scroll-snap-align: start;
+}
+
+@media (min-width: 768px) {
+  .list {
+    /* パソコン: 固定の幅で、画面の広さの分だけ並べる */
+    flex: 0 0 280px;
+  }
+}
+
+.list-header {
+  /* 縦にスクロールしても、見出しは上に残す */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--bg-list);
+}
+
+.list-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.list-count {
+  min-width: 1.5rem;
+  padding: 0 6px;
+  text-align: center;
+  color: var(--text-sub);
+  background: var(--bg-card);
+  border-radius: 999px;
+}
+
+.list-empty {
+  margin: 8px 0;
+  color: var(--text-sub);
+}
+
+.list-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- カード ---- */
+
+.card {
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.card-mark {
+  flex: none;
+  width: 1.5rem;
+  text-align: center;
+  color: var(--text-sub);
+}
+
+.card--done .card-mark {
+  color: var(--due-done-text);
+  font-weight: 700;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  /* タイトルは最大3行。超えたら「…」 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.card-assignee,
+.card-due,
+.card-checklist {
+  margin: 6px 0 0;
+  font-size: 0.875rem;
+}
+
+.card-assignee {
+  color: var(--text-sub);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-assignee--missing {
+  color: var(--warn-text);
+  font-weight: 700;
+}
+
+.card-due {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.card-due--normal {
+  color: var(--due-normal-text);
+  background: var(--due-normal-bg);
+}
+
+.card-due--due_soon {
+  color: var(--due-soon-text);
+  background: var(--due-soon-bg);
+}
+
+.card-due--overdue {
+  color: var(--due-overdue-text);
+  background: var(--due-overdue-bg);
+}
+
+.card-due--completed {
+  color: var(--due-done-text);
+  background: var(--due-done-bg);
+}
+
+.card-checklist {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-sub);
+}
+
+.card-checklist progress {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+/* ---- 読み込み中・失敗・ボードなし ---- */
+
+.skeleton {
+  background: #cbd5e1;
+  border-radius: 8px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-list {
+  padding-top: 8px;
+}
+
+.skeleton-heading {
+  height: 20px;
+  width: 50%;
+  margin-bottom: 12px;
+}
+
+.skeleton-card {
+  height: 72px;
+  margin-bottom: 8px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.notice {
+  margin: 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.notice--error {
+  border-color: var(--due-overdue-text);
+}
+
+.notice-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.notice-detail {
+  margin: 4px 0 12px;
+  color: var(--text-sub);
+}
+
+/* 押せる部品は、44px 以上の大きさにする(N-02, N-13) */
+.button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  font: inherit;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* 画面には出さず、読み上げの道具にだけ伝える文字 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
