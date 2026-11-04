@@ -40,7 +40,7 @@ users ─┬─< boards ──< lists ──< cards ──< checklist_items
 |---|---|---|---|
 | id | BIGINT | ○ | 主キー |
 | board_id | BIGINT | ○ | boards を指す。ボードを消すと、リストも消える |
-| name | VARCHAR(30) | ○ | リスト名(未着手 / 進行中 / レビュー / 完了) |
+| name | VARCHAR(30) | ○ | リスト名(未着手 / 進行中 / 完了) |
 | position | INT | ○ | 並び順(1 から) |
 | is_done_list | BOOLEAN | ○ | 真のリストへ移したカードは、完了として扱う。初期値は偽 |
 

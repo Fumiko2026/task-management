@@ -72,11 +72,10 @@ export function makeBoard(): BoardView {
           }),
         ],
       }),
-      makeList({ id: 3, name: 'レビュー', position: 3, cards: [] }),
       makeList({
-        id: 4,
+        id: 3,
         name: '完了',
-        position: 4,
+        position: 3,
         doneList: true,
         cards: [
           makeCard({

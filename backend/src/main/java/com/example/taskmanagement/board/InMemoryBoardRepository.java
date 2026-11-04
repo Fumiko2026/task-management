@@ -88,8 +88,7 @@ public class InMemoryBoardRepository implements BoardRepository {
 		return new Board(1L, "はじめてのボード", List.of(
 				new TaskList(1L, "未着手", false, List.of(estimate, summary)),
 				new TaskList(2L, "進行中", false, List.of(report, send)),
-				new TaskList(3L, "レビュー", false, List.of()),
-				new TaskList(4L, "完了", true, List.of(contract))));
+				new TaskList(3L, "完了", true, List.of(contract))));
 	}
 
 }

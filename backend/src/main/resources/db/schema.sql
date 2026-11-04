@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS boards (
 );
 CREATE INDEX IF NOT EXISTS ix_boards_user_id ON boards (user_id);
 
--- リスト(未着手 / 進行中 / レビュー / 完了)
+-- リスト(未着手 / 進行中 / 完了。完了は、いつも最後)
 CREATE TABLE IF NOT EXISTS lists (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     board_id     BIGINT      NOT NULL REFERENCES boards (id) ON DELETE CASCADE,

@@ -13,7 +13,7 @@ VALUES ('demo@example.com', 'dummy-hash-not-for-login', 'デモ太郎');
 INSERT INTO boards (user_id, name)
 SELECT id, 'はじめてのボード' FROM users WHERE email = 'demo@example.com';
 
--- リスト4つ(完了のリストは is_done_list が真)
+-- リスト3つ(未着手 / 進行中 / 完了。完了は、いつも最後(いちばん右)で、is_done_list が真)
 INSERT INTO lists (board_id, name, position, is_done_list)
 SELECT b.id, v.name, v.position, v.is_done_list
 FROM boards b
@@ -21,8 +21,7 @@ JOIN users u ON u.id = b.user_id
 CROSS JOIN (VALUES
     ('未着手',   1, FALSE),
     ('進行中',   2, FALSE),
-    ('レビュー', 3, FALSE),
-    ('完了',     4, TRUE)
+    ('完了',     3, TRUE)
 ) AS v (name, position, is_done_list)
 WHERE u.email = 'demo@example.com';
 
