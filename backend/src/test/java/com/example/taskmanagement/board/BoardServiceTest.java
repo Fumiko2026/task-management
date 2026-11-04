@@ -150,4 +150,23 @@ class BoardServiceTest {
 		return new Card(99L, "テスト用", "", null, dueAt, completedAt, List.of());
 	}
 
+	// ---- カードの移動の、入力の確認(DB には届かない前に断る) ----
+
+	@Test
+	void 移動_移し先のリストの指定が無いと_400() {
+		assertThatThrownBy(() -> service.moveCard(1L, new MoveCardRequest(null, 1)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("移し先のリストを指定してください");
+	}
+
+	@Test
+	void 移動_位置が1未満だと_400() {
+		for (int position : new int[] { 0, -1 }) {
+			assertThatThrownBy(() -> service.moveCard(1L, new MoveCardRequest(2L, position)))
+					.as("position=%d", position)
+					.isInstanceOf(BadRequestException.class)
+					.hasMessage("位置は1以上で指定してください");
+		}
+	}
+
 }

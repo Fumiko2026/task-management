@@ -1,4 +1,4 @@
-import type { BoardView, CardView, CreateCardRequest } from './types'
+import type { BoardView, CardView, CreateCardRequest, MoveCardRequest } from './types'
 
 /** API の呼び出しに失敗したとき。status は HTTP の番号(通信そのものが失敗したときは 0)。 */
 export class ApiError extends Error {
@@ -37,6 +37,30 @@ export async function createCard(listId: number, title: string): Promise<CardVie
   try {
     response = await fetch('/api/cards', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
+}
+
+/**
+ * PATCH /api/cards/{id}/move : カードを動かす。position は、移し先で何番目か(1 から)。
+ * 動かせたら、動かしたあとのカード(完了日時や期限の状態が新しい)を返す。
+ * 失敗(リストが無い 404、位置が正しくない 400 など)は、API の理由を持つ ApiError にする。
+ */
+export async function moveCard(cardId: number, listId: number, position: number): Promise<CardView> {
+  const request: MoveCardRequest = { listId, position }
+  let response: Response
+  try {
+    response = await fetch(`/api/cards/${cardId}/move`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })

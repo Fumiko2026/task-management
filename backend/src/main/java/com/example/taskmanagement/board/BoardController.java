@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -55,6 +56,17 @@ public class BoardController {
 	public ResponseEntity<BoardView.CardView> createCard(@RequestBody CreateCardRequest request) {
 		BoardView.CardView created = boardService.createCard(request);
 		return ResponseEntity.created(URI.create("/api/cards/" + created.id())).body(created);
+	}
+
+	/**
+	 * PATCH /api/cards/{id}/move : カードを動かす。本文は {"listId": 2, "position": 1}。
+	 * position は、移し先で何番目に置くか(1 から。省略すると、最後)。
+	 * 動かせたら 200 と、動かしたあとのカード(完了日時・期限の状態も新しい値)を返す。
+	 * 「完了」のリストへ動かしたら完了になり、そこから出したら未完了に戻る。
+	 */
+	@PatchMapping(value = "/cards/{id}/move", produces = JSON_UTF8)
+	public BoardView.CardView moveCard(@PathVariable long id, @RequestBody MoveCardRequest request) {
+		return boardService.moveCard(id, request);
 	}
 
 }

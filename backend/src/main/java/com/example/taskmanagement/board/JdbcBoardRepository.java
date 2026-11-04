@@ -74,8 +74,9 @@ public class JdbcBoardRepository implements BoardRepository {
 
 	@Override
 	public Optional<ListSummary> findList(long id) {
-		return jdbc.query("SELECT id, name, is_done_list FROM lists WHERE id = ?",
-				(rs, rowNum) -> new ListSummary(rs.getLong("id"), rs.getString("name"), rs.getBoolean("is_done_list")),
+		return jdbc.query("SELECT id, name, is_done_list, board_id FROM lists WHERE id = ?",
+				(rs, rowNum) -> new ListSummary(rs.getLong("id"), rs.getString("name"), rs.getBoolean("is_done_list"),
+						rs.getLong("board_id")),
 				id).stream().findFirst();
 	}
 
@@ -98,6 +99,51 @@ public class JdbcBoardRepository implements BoardRepository {
 				RETURNING id
 				""", Long.class, listId, listId, title, listId);
 		return findCard(id).orElseThrow();
+	}
+
+	@Override
+	public Optional<CardLocation> findCardLocation(long cardId) {
+		return jdbc.query("""
+				SELECT c.id, c.list_id, l.board_id, c.completed_at
+				  FROM cards c
+				  JOIN lists l ON l.id = c.list_id
+				 WHERE c.id = ?
+				""",
+				(rs, rowNum) -> new CardLocation(rs.getLong("id"), rs.getLong("list_id"), rs.getLong("board_id"),
+						toJst(rs.getObject("completed_at", OffsetDateTime.class))),
+				cardId).stream().findFirst();
+	}
+
+	@Override
+	public void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt) {
+		long sourceListId = jdbc.queryForObject("SELECT list_id FROM cards WHERE id = ?", Long.class, cardId);
+
+		// 1. カード自身を、移し先のリストに移す(完了日時もここで更新する)
+		jdbc.update("UPDATE cards SET list_id = ?, completed_at = ?, updated_at = now() WHERE id = ?",
+				targetListId, completedAt, cardId);
+
+		// 2. 移し先のカードの並び(動かすカードを除く)に、指定の位置で差し込んで、1,2,3… と振り直す
+		List<Long> target = new ArrayList<>(jdbc.queryForList(
+				"SELECT id FROM cards WHERE list_id = ? AND id <> ? ORDER BY position, id", Long.class,
+				targetListId, cardId));
+		int index = Math.min(Math.max(position, 1), target.size() + 1) - 1;
+		target.add(index, cardId);
+		renumber(target);
+
+		// 3. 元のリストが変わったときは、残ったカードも振り直す(欠番を作らない)
+		if (sourceListId != targetListId) {
+			renumber(jdbc.queryForList("SELECT id FROM cards WHERE list_id = ? ORDER BY position, id", Long.class,
+					sourceListId));
+		}
+	}
+
+	/** カードの id の並びどおりに、position を 1,2,3… と振り直す。 */
+	private void renumber(List<Long> cardIdsInOrder) {
+		jdbc.batchUpdate("UPDATE cards SET position = ? WHERE id = ?", cardIdsInOrder, cardIdsInOrder.size(),
+				(ps, cardId) -> {
+					ps.setInt(1, cardIdsInOrder.indexOf(cardId) + 1);
+					ps.setLong(2, cardId);
+				});
 	}
 
 	// ---- 内部 ----

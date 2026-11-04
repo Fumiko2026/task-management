@@ -2,6 +2,7 @@ package com.example.taskmanagement.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -295,6 +296,162 @@ class BoardControllerTest {
 
 	private int countCards() {
 		return jdbc.queryForObject("SELECT count(*) FROM cards", Integer.class);
+	}
+
+	// ---- PATCH /api/cards/{id}/move : カードの移動 ----
+
+	private MockHttpServletResponse moveCard(long cardId, String json) throws Exception {
+		return mockMvc.perform(patch("/api/cards/" + cardId + "/move")
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(json))
+				.andReturn().getResponse();
+	}
+
+	private String move(long listId, Integer position) {
+		return position == null ? "{\"listId\": " + listId + "}" : "{\"listId\": " + listId + ", \"position\": " + position + "}";
+	}
+
+	@Test
+	void 同じリストの中で動かすと_200と動かしたカードを返し_ボードの順序が変わる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse response = moveCard(ids.laterCardId(), move(ids.todoListId(), 1));
+
+		assertThat(response.getStatus()).isEqualTo(200);
+		assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+		assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("資料を送る");
+		mockMvc.perform(get("/api/board"))
+				.andExpect(jsonPath("$.lists[0].cards[0].title").value("資料を送る"))
+				.andExpect(jsonPath("$.lists[0].cards[1].title").value("見積書を作る"))
+				.andExpect(jsonPath("$.lists[0].cards[2].title").value("資料をまとめる"));
+	}
+
+	@Test
+	void 位置を省略すると最後に_大きすぎる位置も最後に丸める() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		assertThat(moveCard(ids.estimateCardId(), move(ids.todoListId(), null)).getStatus()).isEqualTo(200);
+		mockMvc.perform(get("/api/board")).andExpect(jsonPath("$.lists[0].cards[2].title").value("見積書を作る"));
+
+		assertThat(moveCard(ids.noDueCardId(), move(ids.todoListId(), 999)).getStatus()).isEqualTo(200);
+		mockMvc.perform(get("/api/board")).andExpect(jsonPath("$.lists[0].cards[2].title").value("資料をまとめる"));
+	}
+
+	@Test
+	void 完了のリストへ動かすと_完了日時が入り_完了になる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.noDueCardId() + "/move")
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(move(ids.doneListId(), 1)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.title").value("資料をまとめる"))
+				.andExpect(jsonPath("$.completedAt").isNotEmpty())
+				.andExpect(jsonPath("$.dueStatus").value("COMPLETED"));
+
+		mockMvc.perform(get("/api/board"))
+				.andExpect(jsonPath("$.lists[0].cardCount").value(2))
+				.andExpect(jsonPath("$.lists[1].cardCount").value(2))
+				.andExpect(jsonPath("$.lists[1].cards[0].title").value("資料をまとめる"))
+				.andExpect(jsonPath("$.lists[1].cards[1].title").value("契約書の確認"));
+	}
+
+	@Test
+	void 完了のリストの中で並べ替えても_完了日時は変わらない() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		// 完了にもう1枚入れて、完了の中で並べ替える
+		moveCard(ids.noDueCardId(), move(ids.doneListId(), 2));
+		String before = mockMvc.perform(get("/api/cards/" + ids.doneCardId())).andReturn().getResponse()
+				.getContentAsString(StandardCharsets.UTF_8);
+
+		MockHttpServletResponse response = moveCard(ids.doneCardId(), move(ids.doneListId(), 2));
+
+		assertThat(response.getStatus()).isEqualTo(200);
+		String completedBefore = com.jayway.jsonpath.JsonPath.read(before, "$.completedAt");
+		String completedAfter = com.jayway.jsonpath.JsonPath.read(response.getContentAsString(StandardCharsets.UTF_8), "$.completedAt");
+		assertThat(completedAfter).isEqualTo(completedBefore);
+	}
+
+	@Test
+	void 完了から出すと_完了日時が消えて_期限の状態に戻る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.doneCardId() + "/move")
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(move(ids.todoListId(), 1)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.completedAt").doesNotExist())
+				.andExpect(jsonPath("$.dueStatus").value("OVERDUE")); // 期限は昨日。完了が消えたので、超過に戻る
+
+		mockMvc.perform(get("/api/board"))
+				.andExpect(jsonPath("$.lists[1].cardCount").value(0))
+				.andExpect(jsonPath("$.lists[0].cards[0].title").value("契約書の確認"));
+	}
+
+	@Test
+	void 動かしたあとの並び順は_どのリストも連番になる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		moveCard(ids.noDueCardId(), move(ids.doneListId(), 1));
+		moveCard(ids.estimateCardId(), move(ids.doneListId(), 2));
+
+		assertThat(jdbc.queryForList("SELECT position FROM cards WHERE list_id = ? ORDER BY position", Integer.class,
+				ids.todoListId())).containsExactly(1);
+		assertThat(jdbc.queryForList("SELECT position FROM cards WHERE list_id = ? ORDER BY position", Integer.class,
+				ids.doneListId())).containsExactly(1, 2, 3);
+	}
+
+	@Test
+	void 存在しないカード_存在しないリストは_404() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse noCard = moveCard(999999999L, move(ids.todoListId(), 1));
+		MockHttpServletResponse noList = moveCard(ids.laterCardId(), move(999999999L, 1));
+
+		assertThat(noCard.getStatus()).isEqualTo(404);
+		assertThat(noCard.getContentAsString(StandardCharsets.UTF_8)).contains("カードが見つかりません");
+		assertThat(noList.getStatus()).isEqualTo(404);
+		assertThat(noList.getContentAsString(StandardCharsets.UTF_8)).contains("リストが見つかりません");
+	}
+
+	@Test
+	void 別のボードのリストへは動かせず_400() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long otherBoardId = jdbc.queryForObject(
+				"INSERT INTO boards (user_id, name) VALUES (?, '別のボード') RETURNING id", Long.class, ids.userId());
+		long otherListId = jdbc.queryForObject(
+				"INSERT INTO lists (board_id, name, position) VALUES (?, '未着手', 1) RETURNING id", Long.class, otherBoardId);
+
+		MockHttpServletResponse response = moveCard(ids.laterCardId(), move(otherListId, 1));
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("別のボードのリストには、動かせません");
+		assertThat(jdbc.queryForObject("SELECT list_id FROM cards WHERE id = ?", Long.class, ids.laterCardId()))
+				.isEqualTo(ids.todoListId()); // 動いていない
+	}
+
+	@Test
+	void 移動の入力が正しくないときは_400と日本語の理由を返す() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		// {本文, 期待する理由}
+		String[][] cases = {
+				{ move(ids.todoListId(), 0), "位置は1以上で指定してください" },
+				{ move(ids.todoListId(), -3), "位置は1以上で指定してください" },
+				{ "{\"position\": 1}", "移し先のリストを指定してください" },
+				{ "{}", "移し先のリストを指定してください" },
+				{ "これはJSONではありません", "読み取れません" },
+				{ "{\"listId\": \"abc\"}", "読み取れません" },
+				{ "", "読み取れません" },
+		};
+		for (String[] c : cases) {
+			MockHttpServletResponse response = moveCard(ids.laterCardId(), c[0]);
+			assertThat(response.getStatus()).as(c[0]).isEqualTo(400);
+			assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+			assertThat(response.getContentAsString(StandardCharsets.UTF_8)).as(c[0]).contains(c[1]);
+		}
+		assertThat(titlesOf(ids.todoListId())).containsExactly("見積書を作る", "資料をまとめる", "資料を送る"); // 動いていない
+	}
+
+	private java.util.List<String> titlesOf(long listId) {
+		return jdbc.queryForList("SELECT title FROM cards WHERE list_id = ? ORDER BY position", String.class, listId);
 	}
 
 }

@@ -56,6 +56,12 @@ export interface BoardView {
   lists: ListView[]
 }
 
+/** PATCH /api/cards/{id}/move に送る内容。移し先のリストの id と、移し先で何番目か(1 から)。 */
+export interface MoveCardRequest {
+  listId: number
+  position: number
+}
+
 /** POST /api/cards に送る内容。カードを入れるリストの id と、タイトル。 */
 export interface CreateCardRequest {
   listId: number

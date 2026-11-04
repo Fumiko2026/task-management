@@ -5,12 +5,12 @@ import { dueDisplay } from '../lib/formatDue'
  * カード1枚。幅が狭いため、情報を絞って表示する(画面仕様 §3-④)。
  * いまは表示だけ。完了マークも、押しても何も起きない(完了の操作は次の段階で作る)。
  */
-export function CardItem({ card }: { card: CardView }) {
+export function CardItem({ card, className = '' }: { card: CardView; className?: string }) {
   const done = card.completedAt !== null
   const due = dueDisplay(card)
 
   return (
-    <article className={`card${done ? ' card--done' : ''}`}>
+    <article className={`card${done ? ' card--done' : ''}${className ? ` ${className}` : ''}`}>
       <div className="card-top">
         <span className="card-mark" role="img" aria-label={done ? '完了済み' : '未完了'}>
           {done ? '✔' : '○'}

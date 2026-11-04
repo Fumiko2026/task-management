@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, fetchBoard } from '../api/client'
+import { ApiError, fetchBoard, moveCard as requestMoveCard } from '../api/client'
 import type { BoardView, CardView } from '../api/types'
+import { moveCardInBoard, replaceCard } from '../lib/boardMove'
+import type { CardPlace } from '../lib/boardMove'
 
 /** ボードの読み込みの状態。画面は、この状態に合わせて表示を切り替える。 */
 export type BoardState =
@@ -57,5 +59,28 @@ export function useBoard() {
     })
   }, [])
 
-  return { state, reload, addCard }
+  /**
+   * カードを from から to へ動かす。
+   *   1. すぐ画面に反映する(通信を待たない)。
+   *   2. 保存の通信をして、成功したら、返ってきたカード(完了日時・期限の状態が新しい)で置き換える。
+   *   3. 失敗したら、元の場所へ戻して、理由(日本語の文)を返す。成功なら null を返す。
+   * 戻すときは、ボード全体を昔の状態に戻さず、このカードだけを元の場所に動かす
+   * (通信中に、別のカードを追加していても、消さないため)。
+   */
+  const moveCard = useCallback(async (cardId: number, from: CardPlace, to: CardPlace): Promise<string | null> => {
+    const apply = (change: (board: BoardView) => BoardView) =>
+      setState((current) => (current.status === 'ready' ? { status: 'ready', board: change(current.board) } : current))
+
+    apply((board) => moveCardInBoard(board, cardId, to.listId, to.index))
+    try {
+      const saved = await requestMoveCard(cardId, to.listId, to.index + 1)
+      apply((board) => replaceCard(board, saved))
+      return null
+    } catch (error) {
+      apply((board) => moveCardInBoard(board, cardId, from.listId, from.index))
+      return error instanceof Error ? error.message : '不明なエラー'
+    }
+  }, [])
+
+  return { state, reload, addCard, moveCard }
 }
