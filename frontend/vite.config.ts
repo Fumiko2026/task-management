@@ -12,7 +12,7 @@ export default defineConfig({
     // 開発中は、/api で始まる通信をバックエンド(Spring Boot)へ中継する。
     // ブラウザから見ると同じ場所への通信になるので、CORS(別の場所からの通信の許可)の設定は要らない。
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': 'http://127.0.0.1:8080',
     },
   },
   test: {

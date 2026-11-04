@@ -6,6 +6,7 @@
 #   ./dev.sh test        バックエンドの自動テストを実行
 #   ./dev.sh front       フロントエンド(React)を起動。ブラウザで http://localhost:5173
 #   ./dev.sh front-test  フロントエンドの自動テストを実行
+#   ./dev.sh front-phone iPhone など、同じ Wi-Fi の端末から画面を見られる状態で、フロントエンドを起動(試すときだけ)
 #   ./dev.sh free-port 8080   そのポートを使っているプロセスを止める(8080 と 5173 だけ)
 #
 # どのフォルダから実行しても動く。止めるときは、ターミナルで control + c。
@@ -46,6 +47,32 @@ case "${1:-}" in
 	front-test)
 		front_setup
 		exec npm test
+		;;
+	front-phone)
+		# iPhone など、同じ Wi-Fi の別の端末から、画面を見るための起動。試すときだけ使う。
+		front_setup
+		# パソコンの Wi-Fi の住所(IP アドレス)を調べる。つながっているネットワークの入り口を、先に調べる
+		IFACE="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}' || true)"
+		IP="$(ipconfig getifaddr "${IFACE:-en0}" 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+		[ -n "$IP" ] || fail "パソコンの Wi-Fi の住所が見つかりません。Wi-Fi につながっているか、確かめてください。"
+		free_port 5173
+		echo "=========================================================="
+		echo " iPhone など、同じ Wi-Fi の端末から、画面を見られる状態で起動します。"
+		echo ""
+		echo "   iPhone の Safari で、次の住所を開いてください:"
+		echo "     http://$IP:5173"
+		echo ""
+		echo " 【注意】このアプリには、まだ、ログインがありません。"
+		echo "   同じ Wi-Fi につながっている人は、だれでも、中身を見たり変えたりできます。"
+		echo "   自宅の Wi-Fi で、試す間だけ使ってください。"
+		echo "   お店や学校など、みんなが使う Wi-Fi では、使わないでください。"
+		echo "   終わったら control + c で止めて、ふだんの  ./dev.sh front  に戻してください。"
+		echo "=========================================================="
+		# バックエンドが動いているか(動いていなくても、起動は続ける。画面にだけ、読み込めませんと出る)
+		if ! curl -s -m 2 http://127.0.0.1:8080/api/hello 2>/dev/null | grep -q '^ok$'; then
+			echo "※ バックエンドが動いていません。別のターミナルで  ./dev.sh seed  を実行してください。"
+		fi
+		exec npm run dev -- --host
 		;;
 	free-port)
 		free_port "${2:-}"
@@ -93,11 +120,12 @@ case "${1:-}" in
 		exec ./mvnw test
 		;;
 	*)
-		echo "使い方:  ./dev.sh run | seed | test | front | front-test | free-port <ポート>"
+		echo "使い方:  ./dev.sh run | seed | test | front | front-phone | front-test | free-port <ポート>"
 		echo "  run         バックエンドを起動(テストデータは入れない)。8080 が使われていれば、止めてから起動"
 		echo "  seed        テストデータを入れて、バックエンドを起動。8080 が使われていれば、止めてから起動"
 		echo "  test        バックエンドの自動テストを実行"
 		echo "  front       フロントエンド(React)を起動。http://localhost:5173。5173 が使われていれば、止めてから起動"
+		echo "  front-phone iPhone など、同じ Wi-Fi の端末から画面を見る(試すときだけ。ログインが無いので注意)"
 		echo "  front-test  フロントエンドの自動テストを実行"
 		echo "  free-port   ポート(8080 か 5173)を使っているプロセスを止める"
 		exit 1
