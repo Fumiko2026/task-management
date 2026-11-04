@@ -79,9 +79,14 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 ./dev.sh seed            # テストデータ(db/seed.sql)を入れて起動
 ./dev.sh test            # バックエンドのテスト(DB の起動が必要)
 ./dev.sh front           # フロントエンドを起動(http://localhost:5173。先に ./dev.sh seed でバックエンドを動かす)
+./dev.sh front-phone     # iPhone など、同じ Wi-Fi の端末から画面を見る(試すときだけ。ログインが無いので、終わったら止める)
 ./dev.sh front-test      # フロントエンドのテスト
 ```
 フロントエンドの確認は、`frontend/` で `npm test`、`npm run lint`、`npm run build`(型の検査を含む)が、すべて通ること。
+
+## 公開の範囲(必ず守る)
+- バックエンド(8080)は、**パソコンの中(127.0.0.1)だけ**で待ち受ける(`application.properties` の `server.address`)。ネットワーク全体(`0.0.0.0`)に向けて開かない。ログインが無い間は、同じ Wi-Fi の端末から、API を直接呼べてしまうため。
+- 画面のサーバー(5173)を、同じ Wi-Fi に公開するのは、`./dev.sh front-phone` のときだけ。試す間だけ使い、終わったら止める。`vite.config.ts` に `host` を書いて、いつも公開する形にはしない。公開するときは、ログインが無いことの注意を、利用者に伝える。
 
 ## ポートの競合(必ず守る)
 サーバーは、**標準のポートで動かす**。バックエンドは **8080**、フロントエンドは **5173**。
