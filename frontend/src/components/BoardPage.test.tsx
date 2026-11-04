@@ -23,7 +23,7 @@ describe('BoardPage', () => {
     render(<BoardPage />)
 
     const lists = await screen.findAllByRole('region')
-    expect(lists.map((list) => list.getAttribute('aria-label'))).toEqual(['未着手', '進行中', 'レビュー', '完了'])
+    expect(lists.map((list) => list.getAttribute('aria-label'))).toEqual(['未着手', '進行中', '完了'])
 
     const todo = within(lists[0])
     expect(todo.getByRole('heading', { name: '未着手' })).toBeInTheDocument()
@@ -33,12 +33,25 @@ describe('BoardPage', () => {
   })
 
   it('カードのない列には、「カードはありません」を出す', async () => {
+    const board = makeBoard()
+    board.lists[1] = makeList({ id: 2, name: '進行中', position: 2, cards: [] }) // 進行中を、空にする
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(board)))
+
+    render(<BoardPage />)
+
+    const doing = within(await screen.findByRole('region', { name: '進行中' }))
+    expect(doing.getByText('カードはありません')).toBeInTheDocument()
+  })
+
+  it('「完了」は、いちばん最後(進行中の右)に出る', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(makeBoard())))
 
     render(<BoardPage />)
 
-    const review = within(await screen.findByRole('region', { name: 'レビュー' }))
-    expect(review.getByText('カードはありません')).toBeInTheDocument()
+    const names = (await screen.findAllByRole('region')).map((list) => list.getAttribute('aria-label'))
+    expect(names.indexOf('完了')).toBe(names.indexOf('進行中') + 1)
+    expect(names.at(-1)).toBe('完了')
+    expect(names).not.toContain('レビュー')
   })
 
   it('カードの期限・担当者・チェックリストを、ボードの上に出す', async () => {
@@ -113,7 +126,7 @@ describe('BoardPage', () => {
 
       render(<BoardPage />)
 
-      for (const name of ['未着手', '進行中', 'レビュー']) {
+      for (const name of ['未着手', '進行中']) {
         const region = within(await screen.findByRole('region', { name }))
         expect(region.getByRole('button', { name: addLabel })).toBeInTheDocument()
       }

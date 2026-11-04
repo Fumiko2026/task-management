@@ -24,14 +24,14 @@ class BoardServiceTest {
 	private final BoardService service = new BoardService(new InMemoryBoardRepository(clock), clock);
 
 	@Test
-	void ボードは4つのリストを持つ() {
+	void ボードは3つのリストを持ち_完了は最後() {
 		BoardView board = service.getBoard();
 
 		assertThat(board.lists()).extracting(BoardView.ListView::name)
-				.containsExactly("未着手", "進行中", "レビュー", "完了");
+				.containsExactly("未着手", "進行中", "完了");
 		assertThat(board.lists()).extracting(BoardView.ListView::position)
-				.containsExactly(1, 2, 3, 4);
-		assertThat(board.lists().get(3).doneList()).isTrue();
+				.containsExactly(1, 2, 3);
+		assertThat(board.lists().get(2).doneList()).isTrue();
 	}
 
 	@Test
@@ -94,7 +94,7 @@ class BoardServiceTest {
 	}
 
 	// ---- カードの新規作成の、入力の確認(DB には届かない前に断る) ----
-	// サンプルのリスト: 1=未着手 2=進行中 3=レビュー 4=完了(完了リスト)
+	// サンプルのリスト: 1=未着手 2=進行中 3=完了(完了リスト)
 
 	@Test
 	void 新規作成_リストの指定が無いと_400() {
@@ -133,7 +133,7 @@ class BoardServiceTest {
 
 	@Test
 	void 新規作成_完了のリストには追加できない() {
-		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(4L, "請求書を送る")))
+		assertThatThrownBy(() -> service.createCard(new CreateCardRequest(3L, "請求書を送る")))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("完了のリストには、カードを追加できません");
 	}
