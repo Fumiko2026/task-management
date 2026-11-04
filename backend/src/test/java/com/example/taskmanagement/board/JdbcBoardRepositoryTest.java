@@ -2,6 +2,7 @@ package com.example.taskmanagement.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -109,7 +110,7 @@ class JdbcBoardRepositoryTest {
 	void リストの基本情報を取り出せる() {
 		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
 
-		assertThat(repository.findList(ids.todoListId())).contains(new ListSummary(ids.todoListId(), "未着手", false));
+		assertThat(repository.findList(ids.todoListId())).contains(new ListSummary(ids.todoListId(), "未着手", false, ids.boardId()));
 		assertThat(repository.findList(ids.doneListId()).orElseThrow().doneList()).isTrue();
 		assertThat(repository.findList(-1)).isEmpty();
 	}
@@ -173,6 +174,106 @@ class JdbcBoardRepositoryTest {
 		Card created = repository.createCard(ids.todoListId(), "部長に報告します😀");
 
 		assertThat(repository.findCard(created.id()).orElseThrow().title()).isEqualTo("部長に報告します😀");
+	}
+
+	// ---- カードの移動 ----
+
+	private List<String> titles(long listId) {
+		return jdbc.queryForList("SELECT title FROM cards WHERE list_id = ? ORDER BY position", String.class, listId);
+	}
+
+	private List<Integer> positions(long listId) {
+		return jdbc.queryForList("SELECT position FROM cards WHERE list_id = ? ORDER BY position", Integer.class, listId);
+	}
+
+	@Test
+	void カードの場所を取り出せる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		CardLocation todo = repository.findCardLocation(ids.estimateCardId()).orElseThrow();
+		CardLocation done = repository.findCardLocation(ids.doneCardId()).orElseThrow();
+
+		assertThat(todo.listId()).isEqualTo(ids.todoListId());
+		assertThat(todo.boardId()).isEqualTo(ids.boardId());
+		assertThat(todo.completedAt()).isNull();
+		assertThat(done.listId()).isEqualTo(ids.doneListId());
+		assertThat(done.completedAt()).isNotNull();
+		assertThat(repository.findCardLocation(-1)).isEmpty();
+	}
+
+	@Test
+	void 同じリストの中で_先頭へ動かせる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.moveCard(ids.laterCardId(), ids.todoListId(), 1, null);
+
+		assertThat(titles(ids.todoListId())).containsExactly("資料を送る", "見積書を作る", "資料をまとめる");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
+	}
+
+	@Test
+	void 同じリストの中で_真ん中と最後へ動かせる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 2, null);
+		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "見積書を作る", "資料を送る");
+
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 3, null);
+		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "資料を送る", "見積書を作る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
+	}
+
+	@Test
+	void 位置が大きすぎれば最後に_1より小さければ最初に丸める() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 99, null);
+		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "資料を送る", "見積書を作る");
+
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 0, null);
+		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "資料をまとめる", "資料を送る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
+	}
+
+	@Test
+	void 別のリストへ動かすと_両方のリストの並び順が連番になる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		OffsetDateTime completedAt = OffsetDateTime.now();
+
+		// 未着手の2番目を、完了の先頭へ
+		repository.moveCard(ids.noDueCardId(), ids.doneListId(), 1, completedAt);
+
+		assertThat(titles(ids.doneListId())).containsExactly("資料をまとめる", "契約書の確認");
+		assertThat(positions(ids.doneListId())).containsExactly(1, 2);
+		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "資料を送る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2); // 欠番(2)ができない
+		assertThat(repository.findCard(ids.noDueCardId()).orElseThrow().completedAt()).isNotNull();
+	}
+
+	@Test
+	void 空のリストにも動かせる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long emptyListId = jdbc.queryForObject(
+				"INSERT INTO lists (board_id, name, position) VALUES (?, '進行中', 3) RETURNING id",
+				Long.class, ids.boardId());
+
+		repository.moveCard(ids.laterCardId(), emptyListId, 1, null);
+
+		assertThat(titles(emptyListId)).containsExactly("資料を送る");
+		assertThat(positions(emptyListId)).containsExactly(1);
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2);
+	}
+
+	@Test
+	void 完了から出すと_完了日時が消えて未完了に戻る() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.moveCard(ids.doneCardId(), ids.todoListId(), 2, null);
+
+		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "契約書の確認", "資料をまとめる", "資料を送る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3, 4);
+		assertThat(titles(ids.doneListId())).isEmpty();
+		assertThat(repository.findCard(ids.doneCardId()).orElseThrow().completedAt()).isNull();
 	}
 
 }

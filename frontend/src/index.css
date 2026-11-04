@@ -250,6 +250,69 @@ body {
   accent-color: var(--accent);
 }
 
+/* ---- カードのドラッグ(入れ替え) ---- */
+
+.sortable-card {
+  cursor: grab;
+  /* スマホで長押ししたときに、文字の選択や、メニューが出ないようにする */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.sortable-card:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* 持ち上げている間、元の場所には、薄いカードを残す */
+.sortable-card--dragging {
+  opacity: 0.35;
+}
+
+/* 持ち上げたカード(指やマウスについてくる)。浮いて見えるように、影を付ける */
+.card--overlay {
+  cursor: grabbing;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.3);
+  transform: rotate(1.5deg) scale(1.03);
+}
+
+/* 保存できなかったときの知らせ(画面の下に、しばらく出る) */
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  font-weight: 700;
+  color: var(--due-overdue-text);
+  background: var(--due-overdue-bg);
+  border: 1px solid var(--due-overdue-text);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+}
+
+.toast-close {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--due-overdue-text);
+  background: transparent;
+  border: 1px solid var(--due-overdue-text);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 /* ---- カードを追加 ---- */
 
 .add-card-button {

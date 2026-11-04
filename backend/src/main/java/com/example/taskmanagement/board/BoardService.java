@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** ボードを画面向けの形にして返す。期限の状態の判定もここで行う。 */
 @Service
@@ -71,6 +72,43 @@ public class BoardService {
 
 		Card created = repository.createCard(list.id(), title);
 		return toCardView(created, OffsetDateTime.now(clock));
+	}
+
+	/**
+	 * カードを、別のリスト(または同じリストの別の位置)へ動かす。動かしたあとのカードを返す。
+	 *   - 移し先のリストの指定が無い、位置が 1 未満 → BadRequestException(400)
+	 *   - カードやリストが無い → NotFoundException(404)
+	 *   - 別のボードのリスト → BadRequestException(400)
+	 * 「完了」のリストへ動かしたら、完了日時を記録する(すでに完了していれば、そのまま)。
+	 * 「完了」から別のリストへ動かしたら、完了日時を消して、未完了に戻す。
+	 */
+	@Transactional
+	public BoardView.CardView moveCard(long cardId, MoveCardRequest request) {
+		if (request.listId() == null) {
+			throw new BadRequestException("移し先のリストを指定してください");
+		}
+		if (request.position() != null && request.position() < 1) {
+			throw new BadRequestException("位置は1以上で指定してください");
+		}
+
+		CardLocation location = repository.findCardLocation(cardId)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
+		ListSummary target = repository.findList(request.listId())
+				.orElseThrow(() -> new NotFoundException("リストが見つかりません(id=" + request.listId() + ")"));
+		if (target.boardId() != location.boardId()) {
+			throw new BadRequestException("別のボードのリストには、動かせません");
+		}
+
+		OffsetDateTime now = OffsetDateTime.now(clock);
+		OffsetDateTime completedAt = target.doneList()
+				? (location.completedAt() != null ? location.completedAt() : now)
+				: null;
+		int position = request.position() == null ? Integer.MAX_VALUE : request.position();
+
+		repository.moveCard(cardId, target.id(), position, completedAt);
+		Card moved = repository.findCard(cardId)
+				.orElseThrow(() -> new IllegalStateException("動かしたカードが見つかりません(id=" + cardId + ")"));
+		return toCardView(moved, now);
 	}
 
 	/** 自分のタスク。未完了のカードを、期限が近い順に。 */

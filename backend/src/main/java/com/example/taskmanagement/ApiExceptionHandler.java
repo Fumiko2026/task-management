@@ -37,7 +37,7 @@ public class ApiExceptionHandler {
 	@ExceptionHandler(HttpMessageNotReadableException.class)
 	public ResponseEntity<Map<String, String>> handleUnreadable(HttpMessageNotReadableException e) {
 		return response(HttpStatus.BAD_REQUEST,
-				"送られた内容を読み取れません。{\"listId\": 数字, \"title\": \"文字\"} の形で送ってください");
+				"送られた内容を読み取れません。JSON の形と、各項目の種類(数字か文字か)を確かめてください(例: {\"listId\": 3, \"title\": \"請求書を送る\"})");
 	}
 
 	private ResponseEntity<Map<String, String>> response(HttpStatus status, String message) {
