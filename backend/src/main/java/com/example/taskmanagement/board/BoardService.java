@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Service;
@@ -109,15 +110,84 @@ public class BoardService {
 		}
 
 		OffsetDateTime now = OffsetDateTime.now(clock);
-		OffsetDateTime completedAt = target.doneList()
-				? (location.completedAt() != null ? location.completedAt() : now)
-				: null;
 		int position = request.position() == null ? Integer.MAX_VALUE : request.position();
+		return toCardView(relocate(location, target, position, now), now);
+	}
 
-		repository.moveCard(cardId, target.id(), position, completedAt);
-		Card moved = repository.findCard(cardId)
-				.orElseThrow(() -> new IllegalStateException("動かしたカードが見つかりません(id=" + cardId + ")"));
-		return toCardView(moved, now);
+	/**
+	 * カードを、完了にする(completed = true)、または未完了に戻す(false)。更新後のカードを返す。
+	 *   - 完了にする: 「完了」リストの、いちばん上(position を指定すれば、その位置)へ。完了日時 = いま。
+	 *     完了前にいたリストを、覚える。
+	 *   - 未完了に戻す: 完了前にいたリストの、最後(position を指定すれば、その位置)へ。完了日時と、完了前のリストの記録を消す。
+	 *     完了前のリストが分からない・消えた・「完了」リスト・別のボードのときは、いちばん左の開いたリスト(いまは「未着手」)へ。
+	 *   - すでに、その状態なら、何も変えずに、いまのカードを返す(二重のタップに強い)。
+	 *   - completed が無い、position が 1 未満、「完了」リストや戻す先が無い → BadRequestException(400)。カードが無い → 404。
+	 */
+	@Transactional
+	public BoardView.CardView completeCard(long cardId, CompleteCardRequest request) {
+		if (request.completed() == null) {
+			throw new BadRequestException("completed を、true か false で指定してください");
+		}
+		if (request.position() != null && request.position() < 1) {
+			throw new BadRequestException("位置は1以上で指定してください");
+		}
+
+		CardLocation location = repository.findCardLocation(cardId)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
+		OffsetDateTime now = OffsetDateTime.now(clock);
+
+		boolean alreadyDone = location.completedAt() != null;
+		if (request.completed() == alreadyDone) {
+			Card unchanged = repository.findCard(cardId)
+					.orElseThrow(() -> new IllegalStateException("カードが見つかりません(id=" + cardId + ")"));
+			return toCardView(unchanged, now);
+		}
+
+		if (request.completed()) {
+			ListSummary doneList = repository.findDoneList(location.boardId())
+					.orElseThrow(() -> new BadRequestException("完了のリストがありません"));
+			int position = request.position() == null ? 1 : request.position(); // 完了は、いちばん上に入れる
+			return toCardView(relocate(location, doneList, position, now), now);
+		}
+
+		ListSummary back = returnTarget(location);
+		int position = request.position() == null ? Integer.MAX_VALUE : request.position(); // 戻すときは、最後
+		return toCardView(relocate(location, back, position, now), now);
+	}
+
+	/** 完了を取り消すときの、戻す先。完了前のリスト。使えなければ、そのボードの、いちばん左の開いたリスト。 */
+	private ListSummary returnTarget(CardLocation location) {
+		Optional<ListSummary> remembered = Optional.ofNullable(location.completedFromListId())
+				.flatMap(repository::findList)
+				.filter(list -> !list.doneList() && list.boardId() == location.boardId());
+		return remembered
+				.or(() -> repository.findFirstOpenList(location.boardId()))
+				.orElseThrow(() -> new BadRequestException("戻すリストがありません"));
+	}
+
+	/**
+	 * カードを、target の position 番目へ動かして、動かしたあとのカードを返す(移動と完了の、共通の中身)。
+	 * 「完了」へ入れるとき: 完了日時 = いま(すでに完了していれば、そのまま)。完了前のリスト = いまいたリスト(すでに完了していれば、そのまま)。
+	 * 「完了」以外へ動かすとき: 完了日時と、完了前のリストの記録を消す。
+	 */
+	private Card relocate(CardLocation location, ListSummary target, int position, OffsetDateTime now) {
+		OffsetDateTime completedAt = null;
+		Long completedFromListId = null;
+		if (target.doneList()) {
+			boolean alreadyDone = location.completedAt() != null;
+			completedAt = alreadyDone ? location.completedAt() : now;
+			// 完了の中の並べ替えなら、いまの記録のまま。ほかのリストから入れるなら、いまいたリストを記録する
+			boolean stayingInDoneList = target.id() == location.listId();
+			if (alreadyDone || stayingInDoneList) {
+				completedFromListId = location.completedFromListId(); // null のこともある
+			} else {
+				completedFromListId = location.listId();
+			}
+			// Long と long を、? : で混ぜると、null のときに自動変換でエラーになる。そのため、if で分けている
+		}
+		repository.moveCard(location.cardId(), target.id(), position, completedAt, completedFromListId);
+		return repository.findCard(location.cardId())
+				.orElseThrow(() -> new IllegalStateException("動かしたカードが見つかりません(id=" + location.cardId() + ")"));
 	}
 
 	/**

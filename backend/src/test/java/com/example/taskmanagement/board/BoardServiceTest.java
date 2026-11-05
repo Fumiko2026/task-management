@@ -224,4 +224,30 @@ class BoardServiceTest {
 				.hasMessageContaining("カードが見つかりません");
 	}
 
+	// ---- 完了・未完了の、入力の確認(DB には届かない前に断る) ----
+
+	@Test
+	void 完了_completedが無いと_400() {
+		assertThatThrownBy(() -> service.completeCard(1L, new CompleteCardRequest(null, null)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("completed を、true か false で指定してください");
+	}
+
+	@Test
+	void 完了_位置が1未満だと_400() {
+		for (int position : new int[] { 0, -1 }) {
+			assertThatThrownBy(() -> service.completeCard(1L, new CompleteCardRequest(true, position)))
+					.as("position=%d", position)
+					.isInstanceOf(BadRequestException.class)
+					.hasMessage("位置は1以上で指定してください");
+		}
+	}
+
+	@Test
+	void 完了_カードが無いと_404() {
+		assertThatThrownBy(() -> service.completeCard(999L, new CompleteCardRequest(true, null)))
+				.isInstanceOf(NotFoundException.class)
+				.hasMessageContaining("カードが見つかりません");
+	}
+
 }

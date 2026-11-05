@@ -58,7 +58,7 @@ public class InMemoryBoardRepository implements BoardRepository {
 		for (TaskList list : board.lists()) {
 			for (Card card : list.cards()) {
 				if (card.id() == cardId) {
-					return Optional.of(new CardLocation(cardId, list.id(), board.id(), card.completedAt()));
+					return Optional.of(new CardLocation(cardId, list.id(), board.id(), card.completedAt(), null));
 				}
 			}
 		}
@@ -66,8 +66,21 @@ public class InMemoryBoardRepository implements BoardRepository {
 	}
 
 	@Override
-	public void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt) {
+	public void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt,
+			Long completedFromListId) {
 		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの移動に対応していません");
+	}
+
+	@Override
+	public Optional<ListSummary> findDoneList(long boardId) {
+		return sampleBoard().lists().stream().filter(TaskList::doneList)
+				.map(list -> new ListSummary(list.id(), list.name(), true, boardId)).findFirst();
+	}
+
+	@Override
+	public Optional<ListSummary> findFirstOpenList(long boardId) {
+		return sampleBoard().lists().stream().filter(list -> !list.doneList())
+				.map(list -> new ListSummary(list.id(), list.name(), false, boardId)).findFirst();
 	}
 
 	@Override

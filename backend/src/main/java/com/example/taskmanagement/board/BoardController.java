@@ -84,6 +84,17 @@ public class BoardController {
 	}
 
 	/**
+	 * PATCH /api/cards/{id}/complete : カードを完了にする、または未完了に戻す。
+	 * 本文は {"completed": true}(完了にする)か {"completed": false}(未完了に戻す)。省略できる "position"(1 から)で、入れる位置を指定できる。
+	 * 完了にすると「完了」リストのいちばん上へ。未完了に戻すと、完了前にいたリストの最後へ。
+	 * 200 と、更新後のカードを返す。すでにその状態なら、何も変えずに 200。入力が正しくなければ 400、カードが無ければ 404。
+	 */
+	@PatchMapping(value = "/cards/{id}/complete", produces = JSON_UTF8)
+	public BoardView.CardView completeCard(@PathVariable long id, @RequestBody CompleteCardRequest request) {
+		return boardService.completeCard(id, request);
+	}
+
+	/**
 	 * PATCH /api/cards/{id}/move : カードを動かす。本文は {"listId": 2, "position": 1}。
 	 * position は、移し先で何番目に置くか(1 から。省略すると、最後)。
 	 * 動かせたら 200 と、動かしたあとのカード(完了日時・期限の状態も新しい値)を返す。

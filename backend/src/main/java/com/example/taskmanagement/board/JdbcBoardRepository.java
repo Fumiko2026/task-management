@@ -104,23 +104,28 @@ public class JdbcBoardRepository implements BoardRepository {
 	@Override
 	public Optional<CardLocation> findCardLocation(long cardId) {
 		return jdbc.query("""
-				SELECT c.id, c.list_id, l.board_id, c.completed_at
+				SELECT c.id, c.list_id, l.board_id, c.completed_at, c.completed_from_list_id
 				  FROM cards c
 				  JOIN lists l ON l.id = c.list_id
 				 WHERE c.id = ?
 				""",
 				(rs, rowNum) -> new CardLocation(rs.getLong("id"), rs.getLong("list_id"), rs.getLong("board_id"),
-						toJst(rs.getObject("completed_at", OffsetDateTime.class))),
+						toJst(rs.getObject("completed_at", OffsetDateTime.class)),
+						rs.getObject("completed_from_list_id", Long.class)),
 				cardId).stream().findFirst();
 	}
 
 	@Override
-	public void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt) {
+	public void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt,
+			Long completedFromListId) {
 		long sourceListId = jdbc.queryForObject("SELECT list_id FROM cards WHERE id = ?", Long.class, cardId);
 
-		// 1. カード自身を、移し先のリストに移す(完了日時もここで更新する)
-		jdbc.update("UPDATE cards SET list_id = ?, completed_at = ?, updated_at = now() WHERE id = ?",
-				targetListId, completedAt, cardId);
+		// 1. カード自身を、移し先のリストに移す(完了日時と、完了前のリストの記録も、ここで更新する)
+		jdbc.update("""
+				UPDATE cards
+				   SET list_id = ?, completed_at = ?, completed_from_list_id = ?, updated_at = now()
+				 WHERE id = ?
+				""", targetListId, completedAt, completedFromListId, cardId);
 
 		// 2. 移し先のカードの並び(動かすカードを除く)に、指定の位置で差し込んで、1,2,3… と振り直す
 		List<Long> target = new ArrayList<>(jdbc.queryForList(
@@ -135,6 +140,25 @@ public class JdbcBoardRepository implements BoardRepository {
 			renumber(jdbc.queryForList("SELECT id FROM cards WHERE list_id = ? ORDER BY position, id", Long.class,
 					sourceListId));
 		}
+	}
+
+	@Override
+	public Optional<ListSummary> findDoneList(long boardId) {
+		return findOneList("SELECT id, name, is_done_list, board_id FROM lists "
+				+ "WHERE board_id = ? AND is_done_list ORDER BY position, id LIMIT 1", boardId);
+	}
+
+	@Override
+	public Optional<ListSummary> findFirstOpenList(long boardId) {
+		return findOneList("SELECT id, name, is_done_list, board_id FROM lists "
+				+ "WHERE board_id = ? AND NOT is_done_list ORDER BY position, id LIMIT 1", boardId);
+	}
+
+	private Optional<ListSummary> findOneList(String sql, long boardId) {
+		return jdbc.query(sql,
+				(rs, rowNum) -> new ListSummary(rs.getLong("id"), rs.getString("name"), rs.getBoolean("is_done_list"),
+						rs.getLong("board_id")),
+				boardId).stream().findFirst();
 	}
 
 	@Override

@@ -667,4 +667,194 @@ class BoardControllerTest {
 		return mockMvc.perform(delete("/api/cards/" + cardId)).andReturn().getResponse();
 	}
 
+	// ---- PATCH /api/cards/{id}/complete : 完了にする / 未完了に戻す ----
+
+	private MockHttpServletResponse completeCall(long cardId, String json) throws Exception {
+		return mockMvc.perform(patch("/api/cards/" + cardId + "/complete")
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(json))
+				.andReturn().getResponse();
+	}
+
+	private String completed(boolean value, Integer position) {
+		return position == null ? "{\"completed\": " + value + "}" : "{\"completed\": " + value + ", \"position\": " + position + "}";
+	}
+
+	private String titlesAt(long listId) {
+		return String.join(",", jdbc.queryForList("SELECT title FROM cards WHERE list_id = ? ORDER BY position", String.class, listId));
+	}
+
+	private String positionsAt(long listId) {
+		return jdbc.queryForObject("SELECT coalesce(string_agg(position::text, ',' ORDER BY position), '') FROM cards WHERE list_id = ?",
+				String.class, listId);
+	}
+
+	private Long fromOf(long cardId) {
+		return jdbc.queryForObject("SELECT completed_from_list_id FROM cards WHERE id = ?", Long.class, cardId);
+	}
+
+	/** 「進行中」のリスト(未着手の次、完了の前)を、もう1つ作る。 */
+	private long insertDoingList(BoardTestData.Ids ids) {
+		jdbc.update("UPDATE lists SET position = 3 WHERE id = ?", ids.doneListId()); // 完了を、いちばん右へ
+		return jdbc.queryForObject(
+				"INSERT INTO lists (board_id, name, position) VALUES (?, '進行中', 2) RETURNING id", Long.class, ids.boardId());
+	}
+
+	@Test
+	void 完了にすると_完了リストのいちばん上に入り_完了日時が入り_元のリストの並び順は連番() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse response = completeCall(ids.noDueCardId(), completed(true, null));
+
+		assertThat(response.getStatus()).isEqualTo(200);
+		assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.title")).isEqualTo("資料をまとめる");
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.dueStatus")).isEqualTo("COMPLETED");
+		assertThat((Object) com.jayway.jsonpath.JsonPath.read(body, "$.completedAt")).isNotNull();
+		assertThat(titlesAt(ids.doneListId())).isEqualTo("資料をまとめる,契約書の確認"); // いちばん上
+		assertThat(positionsAt(ids.doneListId())).isEqualTo("1,2");
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料を送る");
+		assertThat(positionsAt(ids.todoListId())).isEqualTo("1,2"); // 欠番なし
+		assertThat(fromOf(ids.noDueCardId())).isEqualTo(ids.todoListId()); // 完了前のリストを覚えた
+	}
+
+	@Test
+	void 未完了に戻すと_完了前のリストの最後に戻り_完了日時と記録が消える() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		completeCall(ids.noDueCardId(), completed(true, null));
+
+		MockHttpServletResponse response = completeCall(ids.noDueCardId(), completed(false, null));
+
+		assertThat(response.getStatus()).isEqualTo(200);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat((Object) com.jayway.jsonpath.JsonPath.read(body, "$.completedAt")).isNull();
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.dueStatus")).isEqualTo("NONE");
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料を送る,資料をまとめる"); // 最後
+		assertThat(positionsAt(ids.todoListId())).isEqualTo("1,2,3");
+		assertThat(titlesAt(ids.doneListId())).isEqualTo("契約書の確認");
+		assertThat(fromOf(ids.noDueCardId())).isNull();
+	}
+
+	@Test
+	void 位置を指定すると_その位置に入る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		completeCall(ids.noDueCardId(), completed(true, 2)); // 完了の2番目
+		assertThat(titlesAt(ids.doneListId())).isEqualTo("契約書の確認,資料をまとめる");
+
+		completeCall(ids.noDueCardId(), completed(false, 1)); // 未着手の1番目
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("資料をまとめる,見積書を作る,資料を送る");
+	}
+
+	@Test
+	void 進行中から完了にしたカードは_未完了に戻すと_進行中に戻る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long doingId = insertDoingList(ids);
+		moveCard(ids.laterCardId(), move(doingId, 1)); // 資料を送る を、進行中へ
+
+		completeCall(ids.laterCardId(), completed(true, null));
+		assertThat(fromOf(ids.laterCardId())).isEqualTo(doingId);
+
+		completeCall(ids.laterCardId(), completed(false, null));
+		assertThat(titlesAt(doingId)).isEqualTo("資料を送る"); // 未着手ではなく、進行中へ
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料をまとめる");
+	}
+
+	@Test
+	void ドラッグ_move_で完了へ入れたカードも_完了前のリストが記録され_未完了に戻すと戻る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long doingId = insertDoingList(ids);
+		moveCard(ids.laterCardId(), move(doingId, 1));
+
+		moveCard(ids.laterCardId(), move(ids.doneListId(), 1)); // ドラッグで、完了へ
+		assertThat(fromOf(ids.laterCardId())).isEqualTo(doingId);
+
+		completeCall(ids.laterCardId(), completed(false, null));
+		assertThat(titlesAt(doingId)).isEqualTo("資料を送る");
+		assertThat(fromOf(ids.laterCardId())).isNull();
+	}
+
+	@Test
+	void ドラッグで完了から出すと_完了前のリストの記録が消える_完了の中の並べ替えでは残る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		moveCard(ids.noDueCardId(), move(ids.doneListId(), 2));
+		assertThat(fromOf(ids.noDueCardId())).isEqualTo(ids.todoListId());
+
+		moveCard(ids.noDueCardId(), move(ids.doneListId(), 1)); // 完了の中で並べ替え
+		assertThat(fromOf(ids.noDueCardId())).isEqualTo(ids.todoListId()); // 残る
+
+		moveCard(ids.noDueCardId(), move(ids.todoListId(), 1)); // 完了から出す
+		assertThat(fromOf(ids.noDueCardId())).isNull();
+	}
+
+	@Test
+	void 完了前のリストが分からないカード_シードの完了カード_は_いちばん左の開いたリストへ戻る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long doingId = insertDoingList(ids);
+		assertThat(fromOf(ids.doneCardId())).isNull();
+
+		completeCall(ids.doneCardId(), completed(false, null));
+
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料をまとめる,資料を送る,契約書の確認"); // 未着手(いちばん左)
+		assertThat(titlesAt(doingId)).isEmpty();
+	}
+
+	@Test
+	void 完了前のリストが消えていたら_いちばん左の開いたリストへ戻る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long doingId = insertDoingList(ids);
+		moveCard(ids.laterCardId(), move(doingId, 1));
+		completeCall(ids.laterCardId(), completed(true, null));
+		jdbc.update("DELETE FROM lists WHERE id = ?", doingId); // 完了前のリストを消す
+		assertThat(fromOf(ids.laterCardId())).isNull();
+
+		completeCall(ids.laterCardId(), completed(false, null));
+
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料をまとめる,資料を送る");
+	}
+
+	@Test
+	void すでにその状態なら_何も変えずに200() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		String doneBefore = mockMvc.perform(get("/api/cards/" + ids.doneCardId())).andReturn().getResponse()
+				.getContentAsString(StandardCharsets.UTF_8);
+
+		MockHttpServletResponse stillDone = completeCall(ids.doneCardId(), completed(true, null)); // 完了済みに、完了
+		MockHttpServletResponse stillOpen = completeCall(ids.laterCardId(), completed(false, null)); // 未完了に、未完了
+
+		assertThat(stillDone.getStatus()).isEqualTo(200);
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(stillDone.getContentAsString(StandardCharsets.UTF_8), "$.completedAt"))
+				.isEqualTo(com.jayway.jsonpath.JsonPath.read(doneBefore, "$.completedAt")); // 完了日時は変わらない
+		assertThat(stillOpen.getStatus()).isEqualTo(200);
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料をまとめる,資料を送る"); // 並びも変わらない
+		assertThat(titlesAt(ids.doneListId())).isEqualTo("契約書の確認");
+	}
+
+	@Test
+	void 完了の入力が正しくないときは_400_カードが無いときは404() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		// {本文, 期待する理由}
+		String[][] cases = {
+				{ "{}", "completed を、true か false で指定してください" },
+				{ "{\"completed\": null}", "completed を、true か false で指定してください" },
+				{ completed(true, 0), "位置は1以上で指定してください" },
+				{ completed(false, -1), "位置は1以上で指定してください" },
+				{ "{\"completed\": \"はい\"}", "読み取れません" },
+				{ "これはJSONではありません", "読み取れません" },
+				{ "", "読み取れません" },
+		};
+		for (String[] c : cases) {
+			MockHttpServletResponse response = completeCall(ids.laterCardId(), c[0]);
+			assertThat(response.getStatus()).as(c[0]).isEqualTo(400);
+			assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+			assertThat(response.getContentAsString(StandardCharsets.UTF_8)).as(c[0]).contains(c[1]);
+		}
+		assertThat(titlesAt(ids.todoListId())).isEqualTo("見積書を作る,資料をまとめる,資料を送る"); // 動いていない
+
+		MockHttpServletResponse notFound = completeCall(999999999L, completed(true, null));
+		assertThat(notFound.getStatus()).isEqualTo(404);
+		assertThat(notFound.getContentAsString(StandardCharsets.UTF_8)).contains("カードが見つかりません");
+	}
+
 }
