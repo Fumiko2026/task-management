@@ -1,6 +1,7 @@
 package com.example.taskmanagement.board;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -590,6 +591,80 @@ class BoardControllerTest {
 
 		assertThat(response.getStatus()).isEqualTo(404);
 		assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("カードが見つかりません");
+	}
+
+	// ---- DELETE /api/cards/{id} : カードの削除(物理削除) ----
+
+	@Test
+	void カードを削除すると_204で中身が無く_DBから行もチェックリストも消える() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse response = mockMvc.perform(delete("/api/cards/" + ids.estimateCardId()))
+				.andReturn().getResponse();
+
+		assertThat(response.getStatus()).isEqualTo(204);
+		assertThat(response.getContentAsString()).isEmpty();
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM cards WHERE id = ?", Integer.class, ids.estimateCardId()))
+				.isZero(); // DB から消えた
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM checklist_items WHERE card_id = ?", Integer.class,
+				ids.estimateCardId())).isZero(); // チェックリストも
+	}
+
+	@Test
+	void 削除したカードは_取得すると404になり_ボードからも消え_件数が減る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		removeCard(ids.estimateCardId());
+
+		mockMvc.perform(get("/api/cards/" + ids.estimateCardId())).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/board"))
+				.andExpect(jsonPath("$.lists[0].cardCount").value(2))
+				.andExpect(jsonPath("$.lists[0].cards[0].title").value("資料をまとめる"))
+				.andExpect(jsonPath("$.lists[0].cards[1].title").value("資料を送る"))
+				.andExpect(jsonPath("$.lists[1].cardCount").value(1));
+		mockMvc.perform(get("/api/tasks")).andExpect(jsonPath("$.length()").value(2));
+	}
+
+	@Test
+	void 削除すると_残ったカードの並び順が連番になる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		removeCard(ids.noDueCardId()); // 未着手の2番目
+
+		assertThat(jdbc.queryForObject("SELECT string_agg(position::text, ',' ORDER BY position) FROM cards WHERE list_id = ?",
+				String.class, ids.todoListId())).isEqualTo("1,2");
+	}
+
+	@Test
+	void 完了済みのカードも削除できる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		assertThat(removeCard(ids.doneCardId()).getStatus()).isEqualTo(204);
+
+		mockMvc.perform(get("/api/board")).andExpect(jsonPath("$.lists[1].cardCount").value(0));
+	}
+
+	@Test
+	void 無いカードを削除すると_404と日本語の理由を返す() throws Exception {
+		BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse response = removeCard(999999999L);
+
+		assertThat(response.getStatus()).isEqualTo(404);
+		assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+		assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("カードが見つかりません");
+	}
+
+	@Test
+	void 同じカードを2回削除すると_2回目は404() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		assertThat(removeCard(ids.laterCardId()).getStatus()).isEqualTo(204);
+		assertThat(removeCard(ids.laterCardId()).getStatus()).isEqualTo(404);
+	}
+
+	private MockHttpServletResponse removeCard(long cardId) throws Exception {
+		return mockMvc.perform(delete("/api/cards/" + cardId)).andReturn().getResponse();
 	}
 
 }

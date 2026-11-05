@@ -51,4 +51,12 @@ public interface BoardRepository {
 	 */
 	void updateDueAt(long cardId, OffsetDateTime dueAt);
 
+	/**
+	 * カードを、DB から本当に消す(物理削除)。元に戻せない。
+	 * そのカードのチェックリストも、DB の仕組み(ON DELETE CASCADE)で、一緒に消える。
+	 * 消したあと、同じリストに残ったカードの並び順を、1,2,3… と振り直す(欠番を作らない)。
+	 * カードが無いときは、何もしない。確認は、呼ぶ側(BoardService)で済ませておく。
+	 */
+	void deleteCard(long cardId);
+
 }

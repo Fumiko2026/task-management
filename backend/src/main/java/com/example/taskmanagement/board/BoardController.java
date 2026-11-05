@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +70,17 @@ public class BoardController {
 	@PatchMapping(value = "/cards/{id}", produces = JSON_UTF8)
 	public BoardView.CardView updateCard(@PathVariable long id, @RequestBody Map<String, Object> changes) {
 		return boardService.updateCard(id, changes);
+	}
+
+	/**
+	 * DELETE /api/cards/{id} : カードを削除する(物理削除。DB から本当に消える。元に戻せない)。
+	 * そのカードのチェックリストも消える。同じリストに残ったカードの並び順は、1,2,3… に振り直す。
+	 * 消せたら 204(中身なし)。カードが無ければ 404(理由つき)。
+	 */
+	@DeleteMapping("/cards/{id}")
+	public ResponseEntity<Void> deleteCard(@PathVariable long id) {
+		boardService.deleteCard(id);
+		return ResponseEntity.noContent().build();
 	}
 
 	/**
