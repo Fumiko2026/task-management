@@ -250,6 +250,52 @@ body {
   accent-color: var(--accent);
 }
 
+/* ---- 完了マーク(○/✔)のボタン ---- */
+
+.card-mark-button {
+  /* 見た目は、これまでの小さな ○ / ✔ のまま、押せる範囲だけを 44×44px にする。
+     負の余白で、カードの高さと、タイトルの位置を、変えない */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -10px -12px -10px -8px;
+  padding: 0;
+  font: inherit;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  /* 押している間、少し大きくして、押したことが分かるようにする */
+  transition: transform 0.12s ease-out;
+}
+
+.card-mark-button:active {
+  transform: scale(1.3);
+}
+
+.card-mark-button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-mark-button {
+    transition: none;
+  }
+
+  .card-mark-button:active {
+    transform: none;
+  }
+}
+
+/* 知らせの中の「元に戻す」(閉じるより、目立たせる) */
+.toast-action {
+  font-weight: 700;
+  background: var(--bg-card);
+}
+
 /* ---- カードのドラッグ(入れ替え) ---- */
 
 .sortable-card {

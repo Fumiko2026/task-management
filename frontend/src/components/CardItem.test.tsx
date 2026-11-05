@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 import { makeCard } from '../test/fixtures'
 import { CardItem } from './CardItem'
 
@@ -95,5 +96,59 @@ describe('CardItem', () => {
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByText(/☑/)).not.toBeInTheDocument()
+  })
+})
+
+describe('CardItem: 完了マーク(○/✔)のボタン', () => {
+  it('onToggleComplete があると、完了マークが、押せるボタンになる(カード名つきの名前)', async () => {
+    const onToggleComplete = vi.fn()
+    const card = makeCard({ title: '見積書を作る' })
+    render(<CardItem card={card} onToggleComplete={onToggleComplete} />)
+
+    await userEvent.click(screen.getByRole('button', { name: '完了にする: 見積書を作る' }))
+
+    expect(onToggleComplete).toHaveBeenCalledTimes(1)
+    expect(onToggleComplete).toHaveBeenCalledWith(card)
+  })
+
+  it('完了済みのカードは、✔ のボタンで、名前は「未完了に戻す: カード名」', () => {
+    const card = makeCard({ title: '契約書の確認', completedAt: '2026-11-02T04:00:00+09:00' })
+    render(<CardItem card={card} onToggleComplete={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: '未完了に戻す: 契約書の確認' })).toHaveTextContent('✔')
+  })
+
+  it('ボタンを押したことが、外側(ドラッグの部品・カードを開く処理)に伝わらない', () => {
+    const outer = { click: vi.fn(), mouseDown: vi.fn(), touchStart: vi.fn(), pointerDown: vi.fn(), keyDown: vi.fn() }
+    render(
+      <div
+        onClick={outer.click}
+        onMouseDown={outer.mouseDown}
+        onTouchStart={outer.touchStart}
+        onPointerDown={outer.pointerDown}
+        onKeyDown={outer.keyDown}
+      >
+        <CardItem card={makeCard({ title: '見積書を作る' })} onToggleComplete={vi.fn()} />
+      </div>,
+    )
+    const button = screen.getByRole('button', { name: '完了にする: 見積書を作る' })
+
+    fireEvent.mouseDown(button)
+    fireEvent.touchStart(button)
+    fireEvent.pointerDown(button)
+    fireEvent.keyDown(button, { key: 'Enter' })
+    fireEvent.keyDown(button, { key: ' ' })
+    fireEvent.click(button)
+
+    for (const [name, handler] of Object.entries(outer)) {
+      expect(handler, name).not.toHaveBeenCalled()
+    }
+  })
+
+  it('onToggleComplete が無いとき(ドラッグ中に浮いているカードなど)は、押せない表示だけ', () => {
+    render(<CardItem card={makeCard()} />)
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '未完了' })).toHaveTextContent('○')
   })
 })

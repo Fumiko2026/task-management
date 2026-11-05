@@ -189,3 +189,91 @@ describe('useBoard の deleteCard', () => {
     expect(findCard(boardOf(hook), 1)).toBeNull()
   })
 })
+
+describe('useBoard の refresh と setCardCompleted', () => {
+  // makeBoard(): 未着手(id 1: カード 1, 2)/ 進行中(id 2: カード 3)/ 完了(id 3: カード 5)
+  const movedToDone = (): BoardView => {
+    const board = makeBoard()
+    return {
+      ...board,
+      lists: [
+        { ...board.lists[0] },
+        { ...board.lists[1], cards: [], cardCount: 0 },
+        { ...board.lists[2], cards: [makeCard({ id: 3, title: '部長に報告', completedAt: '2026-11-06T10:00:00+09:00' }), ...board.lists[2].cards], cardCount: 2 },
+      ],
+    }
+  }
+
+  it('完了にできたら、ボードを取り直して、サーバーの置き場所にそろえる。灰色の枠(読み込み中)は出さない', async () => {
+    let finishRefresh: (response: Response) => void = () => {}
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse(makeCard({ id: 3, completedAt: '2026-11-06T10:00:00+09:00' })))
+      .mockReturnValueOnce(new Promise<Response>((resolve) => (finishRefresh = resolve)))
+    const hook = await loaded(fetchMock)
+
+    let result: Promise<string | null> = Promise.resolve('まだ')
+    act(() => {
+      result = hook.result.current.setCardCompleted(3, true)
+    })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3)) // 取り直しの通信が始まった
+    expect(hook.result.current.state.status).toBe('ready') // 取り直している間も、画面は、そのまま
+
+    await act(async () => {
+      finishRefresh(jsonResponse(movedToDone()))
+      await result
+    })
+
+    expect(await result).toBeNull()
+    expect(findCard(boardOf(hook), 3)).toEqual({ listId: 3, index: 0 }) // 「完了」のいちばん上
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/cards/3/complete')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ completed: true })
+  })
+
+  it('未完了に戻すとき、位置(1 から)も送れる', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse(makeCard({ id: 5 })))
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+    const hook = await loaded(fetchMock)
+
+    await act(async () => {
+      await hook.result.current.setCardCompleted(5, false, 2)
+    })
+
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ completed: false, position: 2 })
+  })
+
+  it('保存に失敗したら、理由を返し、ボードを取り直さず、変えない', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'カードが見つかりません(id=3)' }, 404))
+    const hook = await loaded(fetchMock)
+    const before = boardOf(hook)
+
+    let result: string | null = null
+    await act(async () => {
+      result = await hook.result.current.setCardCompleted(3, true)
+    })
+
+    expect(result).toBe('カードが見つかりません(id=3)')
+    expect(fetchMock).toHaveBeenCalledTimes(2) // 取り直しの通信は、していない
+    expect(boardOf(hook)).toBe(before)
+  })
+
+  it('refresh: 取り直せなかったときは、いまの画面を残す', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const hook = await loaded(fetchMock)
+    const before = boardOf(hook)
+
+    await act(async () => {
+      await hook.result.current.refresh()
+    })
+
+    expect(hook.result.current.state.status).toBe('ready')
+    expect(boardOf(hook)).toBe(before)
+  })
+})

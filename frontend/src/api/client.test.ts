@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse, makeCard } from '../test/fixtures'
-import { ApiError, createCard, deleteCard, moveCard, updateCard } from './client'
+import { ApiError, completeCard, createCard, deleteCard, moveCard, updateCard } from './client'
 
 describe('createCard', () => {
   it('/api/cards に、JSON を POST して、作ったカードを返す', async () => {
@@ -130,5 +130,45 @@ describe('deleteCard', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await expect(deleteCard(7)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
+  })
+})
+
+describe('completeCard', () => {
+  it('/api/cards/{id}/complete に、PATCH で、completed を送り、更新後のカードを返す', async () => {
+    const done = makeCard({ id: 7, title: '請求書を送る', completedAt: '2026-11-06T10:00:00+09:00', dueStatus: 'COMPLETED' })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(done))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await completeCard(7, true)
+
+    expect(result).toEqual(done)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/cards/7/complete',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ completed: true }) }),
+    )
+  })
+
+  it('位置(1 から)を渡したときだけ、position も送る', async () => {
+    // 呼ばれるたびに、新しいレスポンスを返す(同じレスポンスは、2 回は読めない)
+    const fetchMock = vi.fn((_url: string, _init: RequestInit) => Promise.resolve(jsonResponse(makeCard({ id: 7 }))))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await completeCard(7, false, 2)
+    await completeCard(7, false)
+
+    expect(fetchMock.mock.calls[0][1].body).toBe('{"completed":false,"position":2}')
+    expect(fetchMock.mock.calls[1][1].body).toBe('{"completed":false}')
+  })
+
+  it('404 / 400 のときは、API の理由を持つ ApiError にする', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'カードが見つかりません(id=7)' }, 404)))
+
+    await expect(completeCard(7, true)).rejects.toMatchObject({ status: 404, message: 'カードが見つかりません(id=7)' })
+  })
+
+  it('通信できないときは、「通信できませんでした」', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(completeCard(7, true)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
   })
 })
