@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS cards (
     CONSTRAINT ck_cards_title CHECK (char_length(btrim(title)) >= 1),
     CONSTRAINT ck_cards_description CHECK (char_length(description) <= 2000)
 );
+-- 完了する前にいたリスト。「完了」を取り消す(✔ を押す)とき、ここへ戻す。完了していないときは NULL。
+-- リストが消えたら NULL になる。履歴テーブル(card_events)を作るまでの、最小版の覚え方。
+-- 既存のテーブルに列を足すので、ALTER TABLE ... ADD COLUMN IF NOT EXISTS を使う(何度実行しても壊れない)。
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS completed_from_list_id BIGINT REFERENCES lists (id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS ix_cards_list_position ON cards (list_id, position);
 CREATE INDEX IF NOT EXISTS ix_cards_assignee_id ON cards (assignee_id);
 CREATE INDEX IF NOT EXISTS ix_cards_due_at ON cards (due_at);

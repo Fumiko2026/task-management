@@ -87,6 +87,7 @@ erDiagram
         int position "リスト内の並び順"
         datetime due_at "null可"
         datetime completed_at "null可・完了日時"
+        bigint completed_from_list_id FK "null可・完了前のリスト(最小版の覚え方)"
         boolean completed_on_time "期限内に完了したか"
         boolean archived
         datetime deleted_at "null可・30日間は復元可"
@@ -169,7 +170,7 @@ erDiagram
 2. **依頼先は別テーブル**: 担当者を文字列でカードに直接入れると、同じ人の名前の表記がばらつく。`assignees` に分けておけば、候補表示(F-31)と絞り込み(F-34)ができる。
 3. **依頼先の名前を変えても過去のカードは正しく表示される**: カードは名前そのものではなく `assignee_id` で参照するため。
 4. **実績の元データ**: 期限内完了率(F-72)は `completed_at` と `due_at` から計算する。完了時点の判定を `completed_on_time` に保存しておけば、あとで期限を変えても過去の実績は変わらない。
-5. **履歴は `card_events` に追記だけする**: 消さない。期限・リスト移動・完了を同じ形で残せる。
+5. **履歴は `card_events` に追記だけする**: 消さない。期限・リスト移動・完了を同じ形で残せる。(最小版は、履歴を作らず、「完了前のリスト」だけを `cards.completed_from_list_id` に 1 つ覚える。✔ で戻す先に使う。履歴テーブルを作るときに、置き換えを検討する)
 6. **誤削除の復元**: 削除は `deleted_at` に日時を入れるだけにして、30日後に本当に消す(N-09)。
 7. **他人のデータを見せない**: すべてのデータをたどると `users` にたどり着く。取得時は必ず「自分のユーザーID」で絞る(N-07)。
 

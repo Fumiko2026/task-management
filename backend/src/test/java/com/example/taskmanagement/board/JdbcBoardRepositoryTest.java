@@ -206,7 +206,7 @@ class JdbcBoardRepositoryTest {
 	void 同じリストの中で_先頭へ動かせる() {
 		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
 
-		repository.moveCard(ids.laterCardId(), ids.todoListId(), 1, null);
+		repository.moveCard(ids.laterCardId(), ids.todoListId(), 1, null, null);
 
 		assertThat(titles(ids.todoListId())).containsExactly("資料を送る", "見積書を作る", "資料をまとめる");
 		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
@@ -216,10 +216,10 @@ class JdbcBoardRepositoryTest {
 	void 同じリストの中で_真ん中と最後へ動かせる() {
 		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
 
-		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 2, null);
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 2, null, null);
 		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "見積書を作る", "資料を送る");
 
-		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 3, null);
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 3, null, null);
 		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "資料を送る", "見積書を作る");
 		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
 	}
@@ -228,10 +228,10 @@ class JdbcBoardRepositoryTest {
 	void 位置が大きすぎれば最後に_1より小さければ最初に丸める() {
 		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
 
-		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 99, null);
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 99, null, null);
 		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "資料を送る", "見積書を作る");
 
-		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 0, null);
+		repository.moveCard(ids.estimateCardId(), ids.todoListId(), 0, null, null);
 		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "資料をまとめる", "資料を送る");
 		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3);
 	}
@@ -242,7 +242,7 @@ class JdbcBoardRepositoryTest {
 		OffsetDateTime completedAt = OffsetDateTime.now();
 
 		// 未着手の2番目を、完了の先頭へ
-		repository.moveCard(ids.noDueCardId(), ids.doneListId(), 1, completedAt);
+		repository.moveCard(ids.noDueCardId(), ids.doneListId(), 1, completedAt, ids.todoListId());
 
 		assertThat(titles(ids.doneListId())).containsExactly("資料をまとめる", "契約書の確認");
 		assertThat(positions(ids.doneListId())).containsExactly(1, 2);
@@ -258,7 +258,7 @@ class JdbcBoardRepositoryTest {
 				"INSERT INTO lists (board_id, name, position) VALUES (?, '進行中', 3) RETURNING id",
 				Long.class, ids.boardId());
 
-		repository.moveCard(ids.laterCardId(), emptyListId, 1, null);
+		repository.moveCard(ids.laterCardId(), emptyListId, 1, null, null);
 
 		assertThat(titles(emptyListId)).containsExactly("資料を送る");
 		assertThat(positions(emptyListId)).containsExactly(1);
@@ -269,7 +269,7 @@ class JdbcBoardRepositoryTest {
 	void 完了から出すと_完了日時が消えて未完了に戻る() {
 		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
 
-		repository.moveCard(ids.doneCardId(), ids.todoListId(), 2, null);
+		repository.moveCard(ids.doneCardId(), ids.todoListId(), 2, null, null);
 
 		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "契約書の確認", "資料をまとめる", "資料を送る");
 		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3, 4);
@@ -365,6 +365,49 @@ class JdbcBoardRepositoryTest {
 		repository.deleteCard(-1);
 
 		assertThat(titles(ids.todoListId())).hasSize(3);
+	}
+
+	// ---- 完了前のリスト(completed_from_list_id)と、完了・開いたリストの検索 ----
+
+	private Long completedFrom(long cardId) {
+		return jdbc.queryForObject("SELECT completed_from_list_id FROM cards WHERE id = ?", Long.class, cardId);
+	}
+
+	@Test
+	void 完了前のリストを保存でき_完了から出すときに消せる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.moveCard(ids.noDueCardId(), ids.doneListId(), 1, OffsetDateTime.now(), ids.todoListId());
+		assertThat(completedFrom(ids.noDueCardId())).isEqualTo(ids.todoListId());
+		assertThat(repository.findCardLocation(ids.noDueCardId()).orElseThrow().completedFromListId())
+				.isEqualTo(ids.todoListId());
+
+		repository.moveCard(ids.noDueCardId(), ids.todoListId(), 1, null, null);
+		assertThat(completedFrom(ids.noDueCardId())).isNull();
+	}
+
+	@Test
+	void 完了前のリストを消すと_カードは残り_記録だけがNULLになる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		long otherListId = jdbc.queryForObject(
+				"INSERT INTO lists (board_id, name, position) VALUES (?, '進行中', 3) RETURNING id", Long.class, ids.boardId());
+		repository.moveCard(ids.laterCardId(), ids.doneListId(), 1, OffsetDateTime.now(), otherListId);
+		assertThat(completedFrom(ids.laterCardId())).isEqualTo(otherListId);
+
+		jdbc.update("DELETE FROM lists WHERE id = ?", otherListId);
+
+		assertThat(repository.findCard(ids.laterCardId())).isPresent(); // カードは、完了リストにいるので、残る
+		assertThat(completedFrom(ids.laterCardId())).isNull();
+	}
+
+	@Test
+	void 完了リストと_いちばん左の開いたリストを探せる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		assertThat(repository.findDoneList(ids.boardId()).orElseThrow().id()).isEqualTo(ids.doneListId());
+		assertThat(repository.findFirstOpenList(ids.boardId()).orElseThrow().id()).isEqualTo(ids.todoListId());
+		assertThat(repository.findDoneList(-1)).isEmpty();
+		assertThat(repository.findFirstOpenList(-1)).isEmpty();
 	}
 
 }

@@ -106,7 +106,7 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 - 他の人のデータは見せない(取得は、ログインした利用者の ID で絞る)。
 - フロントエンドの API の型は `frontend/src/api/types.ts` に置く。バックエンドの `BoardView.java` などを変えたら、ここも直す。
 - カードのドラッグ操作は `@dnd-kit`。カードとリストの目印は `card-3` / `list-3` の形(`frontend/src/lib/dndIds.ts`)。ボードの中でカードを動かす計算は、画面に頼らない関数として `frontend/src/lib/boardMove.ts` に置く(テストしやすくするため)。
-- カードの並び順(`position`)は、どのリストでも 1,2,3… の連番にする(欠番を作らない)。カードを動かしたときも、消したときも、残ったカードを振り直す。「完了」リストへ入れたら完了日時を記録し、出したら消す。
+- カードの並び順(`position`)は、どのリストでも 1,2,3… の連番にする(欠番を作らない)。カードを動かしたときも、消したときも、残ったカードを振り直す。「完了」リストへ入れたら完了日時と、完了前のリスト(`completed_from_list_id`)を記録し、出したら両方を消す(移動 API も完了 API も、`BoardService.relocate` を使う)。
 - カードの削除は物理削除(DB から本当に消える)。元に戻せないので、画面から消すときは、必ず、削除の前に確認を出す(要件 NM-08)。
 - 画面は、色だけで状態を伝えない(アイコンと文字も出す)。押せる部品は 44px 以上。まだ動かない部品は、画面に出さない。
-- テーブルの変更は `backend/src/main/resources/db/schema.sql`。変更するときは `docs/table-definition.md` も更新する。
+- テーブルの変更は `backend/src/main/resources/db/schema.sql`。変更するときは `docs/table-definition.md` も更新する。既存のテーブルに列を足すときは、`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` を使う(何度実行しても壊れず、データも消えない)。

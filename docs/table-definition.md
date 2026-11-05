@@ -66,6 +66,7 @@ users ─┬─< boards ──< lists ──< cards ──< checklist_items
 | position | INT | ○ | リスト内の並び順(1 から) |
 | due_at | TIMESTAMPTZ | | 期限。未設定は空 |
 | completed_at | TIMESTAMPTZ | | 完了日時。未完了は空 |
+| completed_from_list_id | BIGINT | | **完了する前にいたリスト**。lists を指す。「完了」を取り消す(✔ を押す)ときに、ここへ戻す。完了していないときと、不明なときは空。**リストを消すと空になる**(カードは残る) |
 | created_at | TIMESTAMPTZ | ○ | 作成日時 |
 | updated_at | TIMESTAMPTZ | ○ | 更新日時 |
 
@@ -96,6 +97,8 @@ ER 図の全体設計([er-diagram.md](er-diagram.md))にあって、最小版の
 | ごみ箱(削除したカードの復元)用の `deleted_at` | 第 3 段階。最小版は、削除すると本当に消える(削除前に確認を出す) |
 | 期限内に完了したかの記録(`completed_on_time`) | 実績の画面を作る段階 |
 
+- 「完了前のリスト」は、履歴テーブル(`card_events`)を作るまでの、**最小版の覚え方**として、`cards.completed_from_list_id` の 1 列で持つ。履歴テーブルを作るときに、置き換えを検討する。
+
 ## 5. 変更するときの注意
-- `schema.sql` は、**テーブルが無いときに作る**だけで、すでにあるテーブルの列は変えない。列を足す・変えるときは、`ALTER TABLE` を別に流すか、DB を作り直す(`docker compose down -v`。**データは全部消える**)。
+- `schema.sql` の `CREATE TABLE IF NOT EXISTS` は、**テーブルが無いときに作る**だけで、すでにあるテーブルの列は変えない。列を足すときは、`schema.sql` に **`ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`** を書く(何度実行しても壊れず、起動のたびに、足りない列だけが足される。**データは消えない**)。例: `cards.completed_from_list_id`。列の型を変える・消すときは、`ALTER TABLE` を別に流すか、DB を作り直す(`docker compose down -v`。**データは全部消える**)。
 - 本格的に変更を管理するときは、Flyway などの道具の導入を検討する。
