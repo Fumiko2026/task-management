@@ -137,6 +137,11 @@ public class JdbcBoardRepository implements BoardRepository {
 		}
 	}
 
+	@Override
+	public void updateDueAt(long cardId, OffsetDateTime dueAt) {
+		jdbc.update("UPDATE cards SET due_at = ?, updated_at = now() WHERE id = ?", dueAt, cardId);
+	}
+
 	/** カードの id の並びどおりに、position を 1,2,3… と振り直す。 */
 	private void renumber(List<Long> cardIdsInOrder) {
 		jdbc.batchUpdate("UPDATE cards SET position = ? WHERE id = ?", cardIdsInOrder, cardIdsInOrder.size(),

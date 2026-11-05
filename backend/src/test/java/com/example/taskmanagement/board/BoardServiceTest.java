@@ -169,4 +169,50 @@ class BoardServiceTest {
 		}
 	}
 
+	// ---- カードの更新の、入力の確認(DB には届かない前に断る) ----
+
+	@Test
+	void 更新_本文が空だと_400() {
+		assertThatThrownBy(() -> service.updateCard(1L, java.util.Map.of()))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("変更する項目を指定してください");
+	}
+
+	@Test
+	void 更新_更新できない項目は_400() {
+		assertThatThrownBy(() -> service.updateCard(1L, java.util.Map.of("title", "新しいタイトル")))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("更新できない項目です: title");
+	}
+
+	@Test
+	void 更新_期限が_文字でもnullでもないと_400() {
+		assertThatThrownBy(() -> service.updateCard(1L, java.util.Map.of("dueAt", 123)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("日時の文字、または null");
+	}
+
+	@Test
+	void 更新_期限の形が正しくない_時差が無い_範囲外は_400() {
+		for (String bad : new String[] { "あした", "2026-11-10", "2026-11-10T18:00", "2026-13-40T18:00:00+09:00" }) {
+			assertThatThrownBy(() -> service.updateCard(1L, java.util.Map.of("dueAt", bad)))
+					.as("dueAt=%s", bad)
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("期限の日時の形が正しくありません");
+		}
+		for (String outOfRange : new String[] { "1999-12-31T23:59:59+09:00", "2101-01-01T00:00:00+09:00" }) {
+			assertThatThrownBy(() -> service.updateCard(1L, java.util.Map.of("dueAt", outOfRange)))
+					.as("dueAt=%s", outOfRange)
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("範囲外");
+		}
+	}
+
+	@Test
+	void 更新_カードが無いと_404() {
+		assertThatThrownBy(() -> service.updateCard(999L, java.util.Map.of("dueAt", "2026-11-10T18:00:00+09:00")))
+				.isInstanceOf(NotFoundException.class)
+				.hasMessageContaining("カードが見つかりません");
+	}
+
 }

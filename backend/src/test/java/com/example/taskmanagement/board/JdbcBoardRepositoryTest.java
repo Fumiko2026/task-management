@@ -3,6 +3,7 @@ package com.example.taskmanagement.board;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -274,6 +275,34 @@ class JdbcBoardRepositoryTest {
 		assertThat(positions(ids.todoListId())).containsExactly(1, 2, 3, 4);
 		assertThat(titles(ids.doneListId())).isEmpty();
 		assertThat(repository.findCard(ids.doneCardId()).orElseThrow().completedAt()).isNull();
+	}
+
+	// ---- カードの期限の更新 ----
+
+	@Test
+	void 期限を設定でき_消せる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		OffsetDateTime due = OffsetDateTime.now().plusDays(5).truncatedTo(ChronoUnit.MILLIS);
+
+		repository.updateDueAt(ids.noDueCardId(), due); // 期限なしのカードに、設定する
+		repository.updateDueAt(ids.estimateCardId(), null); // 期限のあるカードを、消す
+
+		assertThat(repository.findCard(ids.noDueCardId()).orElseThrow().dueAt().toInstant()).isEqualTo(due.toInstant());
+		assertThat(repository.findCard(ids.estimateCardId()).orElseThrow().dueAt()).isNull();
+	}
+
+	@Test
+	void 期限を変えても_リスト_並び順_完了日時_ほかのカードは変わらない() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		OffsetDateTime laterDue = repository.findCard(ids.laterCardId()).orElseThrow().dueAt();
+		OffsetDateTime completedAt = repository.findCard(ids.doneCardId()).orElseThrow().completedAt();
+
+		repository.updateDueAt(ids.doneCardId(), OffsetDateTime.now().plusDays(9)); // 完了済みのカードの期限を変える
+
+		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "資料をまとめる", "資料を送る");
+		assertThat(titles(ids.doneListId())).containsExactly("契約書の確認");
+		assertThat(repository.findCard(ids.doneCardId()).orElseThrow().completedAt()).isEqualTo(completedAt);
+		assertThat(repository.findCard(ids.laterCardId()).orElseThrow().dueAt()).isEqualTo(laterDue);
 	}
 
 }

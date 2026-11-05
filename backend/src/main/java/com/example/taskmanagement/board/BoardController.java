@@ -2,6 +2,7 @@ package com.example.taskmanagement.board;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,6 +57,18 @@ public class BoardController {
 	public ResponseEntity<BoardView.CardView> createCard(@RequestBody CreateCardRequest request) {
 		BoardView.CardView created = boardService.createCard(request);
 		return ResponseEntity.created(URI.create("/api/cards/" + created.id())).body(created);
+	}
+
+	/**
+	 * PATCH /api/cards/{id} : カードを更新する(部分更新。送った項目だけを変える)。
+	 * いま更新できるのは、期限だけ。本文は {"dueAt": "2026-11-10T18:00:00+09:00"}(期限を設定)か、
+	 * {"dueAt": null}(期限を消す)。項目が無いことと null(消す)ことを区別するため、Map で受ける。
+	 * 更新できたら 200 と、更新後のカード(期限の状態も新しい値)を返す。
+	 * 入力が正しくなければ 400、カードが無ければ 404(どちらも理由つき)。
+	 */
+	@PatchMapping(value = "/cards/{id}", produces = JSON_UTF8)
+	public BoardView.CardView updateCard(@PathVariable long id, @RequestBody Map<String, Object> changes) {
+		return boardService.updateCard(id, changes);
 	}
 
 	/**

@@ -2,7 +2,9 @@ package com.example.taskmanagement.board;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Service;
@@ -17,6 +19,13 @@ public class BoardService {
 
 	/** カードのタイトルの長さの上限(要件 NM-06。DB の定義と同じ)。 */
 	static final int TITLE_MAX_LENGTH = 100;
+
+	/** 更新できる項目の名前(いまは、期限だけ)。 */
+	private static final String FIELD_DUE_AT = "dueAt";
+
+	/** 期限として受け付ける年の範囲(とんでもない日付を、はじく)。 */
+	private static final int DUE_MIN_YEAR = 2000;
+	private static final int DUE_MAX_YEAR = 2100;
 
 	private final BoardRepository repository;
 	private final Clock clock;
@@ -109,6 +118,55 @@ public class BoardService {
 		Card moved = repository.findCard(cardId)
 				.orElseThrow(() -> new IllegalStateException("動かしたカードが見つかりません(id=" + cardId + ")"));
 		return toCardView(moved, now);
+	}
+
+	/**
+	 * カードを更新する。送られた項目だけを変える(部分更新)。いま更新できるのは、期限(dueAt)だけ。
+	 * dueAt は、時差つきの日時の文字(例: 2026-11-10T18:00:00+09:00)で期限を設定し、null で期限を消す。
+	 *   - 本文が空、更新できない項目、日時の形が正しくない、年が範囲外 → BadRequestException(400)
+	 *   - カードが無い → NotFoundException(404)
+	 * リスト・並び順・完了日時は、変えない(完了済みのカードの期限も、変えられる)。
+	 * 更新したあとのカードを返す(期限の状態も、新しい値)。
+	 */
+	@Transactional
+	public BoardView.CardView updateCard(long cardId, Map<String, Object> changes) {
+		if (changes == null || changes.isEmpty()) {
+			throw new BadRequestException("変更する項目を指定してください");
+		}
+		for (String field : changes.keySet()) {
+			if (!FIELD_DUE_AT.equals(field)) {
+				throw new BadRequestException("更新できない項目です: " + field + "(いまは " + FIELD_DUE_AT + " だけ)");
+			}
+		}
+		OffsetDateTime dueAt = parseDueAt(changes.get(FIELD_DUE_AT)); // null は、「期限を消す」
+
+		repository.findCard(cardId)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
+		repository.updateDueAt(cardId, dueAt);
+		Card updated = repository.findCard(cardId)
+				.orElseThrow(() -> new IllegalStateException("更新したカードが見つかりません(id=" + cardId + ")"));
+		return toCardView(updated, OffsetDateTime.now(clock));
+	}
+
+	/** 期限の値を読む。null はそのまま(期限を消す)。文字は、時差つきの日時として読む。 */
+	private OffsetDateTime parseDueAt(Object value) {
+		if (value == null) {
+			return null;
+		}
+		if (!(value instanceof String text)) {
+			throw new BadRequestException(FIELD_DUE_AT + " は、日時の文字、または null で指定してください");
+		}
+		OffsetDateTime parsed;
+		try {
+			parsed = OffsetDateTime.parse(text.strip());
+		} catch (DateTimeParseException e) {
+			throw new BadRequestException("期限の日時の形が正しくありません。時差つきで指定してください(例: 2026-11-10T18:00:00+09:00)");
+		}
+		int year = parsed.atZoneSameInstant(clock.getZone()).getYear();
+		if (year < DUE_MIN_YEAR || year > DUE_MAX_YEAR) {
+			throw new BadRequestException("期限の日付が範囲外です(" + DUE_MIN_YEAR + "〜" + DUE_MAX_YEAR + "年)");
+		}
+		return parsed;
 	}
 
 	/** 自分のタスク。未完了のカードを、期限が近い順に。 */

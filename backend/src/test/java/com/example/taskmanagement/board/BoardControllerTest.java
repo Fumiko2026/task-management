@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -452,6 +454,142 @@ class BoardControllerTest {
 
 	private java.util.List<String> titlesOf(long listId) {
 		return jdbc.queryForList("SELECT title FROM cards WHERE list_id = ? ORDER BY position", String.class, listId);
+	}
+
+	// ---- PATCH /api/cards/{id} : カードの期限の更新 ----
+
+	private MockHttpServletResponse patchCard(long cardId, String json) throws Exception {
+		return mockMvc.perform(patch("/api/cards/" + cardId)
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(json))
+				.andReturn().getResponse();
+	}
+
+	/** 日本時間の「いま + 何時間後」を、時差つきの文字にする。 */
+	private String jstInHours(long hours) {
+		return OffsetDateTime.now(ZoneOffset.ofHours(9)).plusHours(hours).withNano(0).toString();
+	}
+
+	private String due(String iso) {
+		return "{\"dueAt\": \"" + iso + "\"}";
+	}
+
+	@Test
+	void 期限を設定すると_200と更新後のカードを返し_日本時間で返る() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.noDueCardId())
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(due(jstInHours(24 * 3))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.title").value("資料をまとめる"))
+				.andExpect(jsonPath("$.dueAt").value(org.hamcrest.Matchers.endsWith("+09:00")))
+				.andExpect(jsonPath("$.dueStatus").value("NORMAL"));
+	}
+
+	@Test
+	void 期限の状態は_期限しだいで_通常_もうすぐ_超過になる() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.noDueCardId())
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(due(jstInHours(5))))
+				.andExpect(jsonPath("$.dueStatus").value("DUE_SOON"));
+		mockMvc.perform(patch("/api/cards/" + ids.noDueCardId())
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(due(jstInHours(-5))))
+				.andExpect(jsonPath("$.dueStatus").value("OVERDUE"));
+	}
+
+	@Test
+	void Z付きの日時も_日本時間の時差にそろえて返す() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.noDueCardId())
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content(due("2030-12-01T09:00:00Z")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.dueAt").value("2030-12-01T18:00:00+09:00"));
+	}
+
+	@Test
+	void nullを送ると_期限が消える() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		mockMvc.perform(patch("/api/cards/" + ids.estimateCardId())
+				.contentType(MediaType.APPLICATION_JSON).characterEncoding("UTF-8").content("{\"dueAt\": null}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.dueAt").doesNotExist())
+				.andExpect(jsonPath("$.dueStatus").value("NONE"));
+		assertThat(jdbc.queryForObject("SELECT due_at FROM cards WHERE id = ?", java.sql.Timestamp.class, ids.estimateCardId()))
+				.isNull();
+	}
+
+	@Test
+	void 完了済みのカードの期限も変えられ_完了のまま_完了日時は変わらない() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		String before = mockMvc.perform(get("/api/cards/" + ids.doneCardId())).andReturn().getResponse()
+				.getContentAsString(StandardCharsets.UTF_8);
+
+		MockHttpServletResponse response = patchCard(ids.doneCardId(), due("2030-12-01T09:00:00Z"));
+
+		assertThat(response.getStatus()).isEqualTo(200);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.dueStatus")).isEqualTo("COMPLETED");
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.dueAt")).isEqualTo("2030-12-01T18:00:00+09:00");
+		assertThat((String) com.jayway.jsonpath.JsonPath.read(body, "$.completedAt"))
+				.isEqualTo(com.jayway.jsonpath.JsonPath.read(before, "$.completedAt"));
+	}
+
+	@Test
+	void 期限を変えても_リストと並び順は変わらず_ボードに反映され_DBに保存される() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		patchCard(ids.laterCardId(), due("2030-12-01T09:00:00Z"));
+
+		mockMvc.perform(get("/api/board"))
+				.andExpect(jsonPath("$.lists[0].cards[0].title").value("見積書を作る"))
+				.andExpect(jsonPath("$.lists[0].cards[1].title").value("資料をまとめる"))
+				.andExpect(jsonPath("$.lists[0].cards[2].title").value("資料を送る"))
+				.andExpect(jsonPath("$.lists[0].cards[2].dueAt").value("2030-12-01T18:00:00+09:00"))
+				.andExpect(jsonPath("$.lists[1].cards[0].title").value("契約書の確認"));
+		assertThat(jdbc.queryForObject("SELECT list_id FROM cards WHERE id = ?", Long.class, ids.laterCardId()))
+				.isEqualTo(ids.todoListId());
+	}
+
+	@Test
+	void 更新の入力が正しくないときは_400と日本語の理由を返し_期限は変わらない() throws Exception {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		java.sql.Timestamp before = jdbc.queryForObject("SELECT due_at FROM cards WHERE id = ?", java.sql.Timestamp.class,
+				ids.estimateCardId());
+
+		// {本文, 期待する理由}
+		String[][] cases = {
+				{ "{}", "変更する項目を指定してください" },
+				{ "{\"title\": \"新しいタイトル\"}", "更新できない項目です: title" },
+				{ "{\"dueAt\": 123}", "日時の文字、または null" },
+				{ "{\"dueAt\": {\"a\": 1}}", "日時の文字、または null" },
+				{ due("2030-12-01T18:00"), "期限の日時の形が正しくありません" },
+				{ due("あした"), "期限の日時の形が正しくありません" },
+				{ due("1999-12-31T23:59:59+09:00"), "範囲外" },
+				{ due("2101-01-01T00:00:00+09:00"), "範囲外" },
+				{ "これはJSONではありません", "読み取れません" },
+				{ "[]", "読み取れません" },
+				{ "", "読み取れません" },
+		};
+		for (String[] c : cases) {
+			MockHttpServletResponse response = patchCard(ids.estimateCardId(), c[0]);
+			assertThat(response.getStatus()).as(c[0]).isEqualTo(400);
+			assertThat(response.getContentType()).isEqualToIgnoringCase("application/json;charset=UTF-8");
+			assertThat(response.getContentAsString(StandardCharsets.UTF_8)).as(c[0]).contains(c[1]);
+		}
+		assertThat(jdbc.queryForObject("SELECT due_at FROM cards WHERE id = ?", java.sql.Timestamp.class, ids.estimateCardId()))
+				.isEqualTo(before);
+	}
+
+	@Test
+	void 更新するカードが無いときは_404() throws Exception {
+		BoardTestData.insert(jdbc);
+
+		MockHttpServletResponse response = patchCard(999999999L, due("2030-12-01T09:00:00Z"));
+
+		assertThat(response.getStatus()).isEqualTo(404);
+		assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("カードが見つかりません");
 	}
 
 }

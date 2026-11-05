@@ -62,6 +62,11 @@ public class InMemoryBoardRepository implements BoardRepository {
 		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの移動に対応していません");
 	}
 
+	@Override
+	public void updateDueAt(long cardId, OffsetDateTime dueAt) {
+		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの更新に対応していません");
+	}
+
 	private Stream<Card> allCards() {
 		return sampleBoard().lists().stream().flatMap(list -> list.cards().stream());
 	}
