@@ -45,4 +45,10 @@ public interface BoardRepository {
 	 */
 	void moveCard(long cardId, long targetListId, int position, OffsetDateTime completedAt);
 
+	/**
+	 * カードの期限を変える。dueAt が null なら、期限を消す。更新日時(updated_at)も更新する。
+	 * リスト・並び順・完了日時は、変えない。カードの存在の確認は、呼ぶ側(BoardService)で済ませておく。
+	 */
+	void updateDueAt(long cardId, OffsetDateTime dueAt);
+
 }
