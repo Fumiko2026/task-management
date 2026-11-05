@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse, makeCard } from '../test/fixtures'
-import { ApiError, createCard, moveCard } from './client'
+import { ApiError, createCard, deleteCard, moveCard, updateCard } from './client'
 
 describe('createCard', () => {
   it('/api/cards に、JSON を POST して、作ったカードを返す', async () => {
@@ -67,5 +67,68 @@ describe('moveCard', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await expect(moveCard(7, 3, 1)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
+  })
+})
+
+describe('updateCard', () => {
+  it('/api/cards/{id} に、PATCH で、期限を送り、更新後のカードを返す', async () => {
+    const updated = makeCard({ id: 7, dueAt: '2026-11-11T18:00:00+09:00', dueStatus: 'DUE_SOON' })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(updated))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await updateCard(7, { dueAt: '2026-11-11T18:00:00+09:00' })
+
+    expect(result).toEqual(updated)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/cards/7',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ dueAt: '2026-11-11T18:00:00+09:00' }) }),
+    )
+  })
+
+  it('期限を消すときは、null を送る', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCard({ id: 7 })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateCard(7, { dueAt: null })
+
+    expect(fetchMock.mock.calls[0][1].body).toBe('{"dueAt":null}')
+  })
+
+  it('400 / 404 のときは、API の理由を持つ ApiError にする', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: '期限の日付が範囲外です(2000〜2100年)' }, 400)))
+
+    await expect(updateCard(7, { dueAt: '1999-01-01T00:00:00+09:00' })).rejects.toMatchObject({
+      status: 400,
+      message: '期限の日付が範囲外です(2000〜2100年)',
+    })
+  })
+
+  it('通信できないときは、「通信できませんでした」', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(updateCard(7, { dueAt: null })).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
+  })
+})
+
+describe('deleteCard', () => {
+  it('/api/cards/{id} に、DELETE を送る。204(中身なし)で成功', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteCard(7)).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/cards/7', expect.objectContaining({ method: 'DELETE' }))
+  })
+
+  it('404 のときは、API の理由を持つ ApiError にする', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'カードが見つかりません(id=7)' }, 404)))
+
+    await expect(deleteCard(7)).rejects.toMatchObject({ status: 404, message: 'カードが見つかりません(id=7)' })
+  })
+
+  it('通信できないときは、「通信できませんでした」', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(deleteCard(7)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
   })
 })

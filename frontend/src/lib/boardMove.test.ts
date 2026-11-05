@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardView } from '../api/types'
 import { makeBoard, makeCard, makeList } from '../test/fixtures'
-import { countCards, findCard, moveCardInBoard, replaceCard } from './boardMove'
+import { countCards, findCard, moveCardInBoard, removeCard, replaceCard } from './boardMove'
 
 // makeBoard(): 未着手(id 1: カード 1, 2)/ 進行中(id 2: カード 3)/ 完了(id 3: カード 5)
 const ids = (board: BoardView, listId: number) => board.lists.find((l) => l.id === listId)!.cards.map((c) => c.id)
@@ -100,5 +100,35 @@ describe('replaceCard', () => {
     expect(findCard(replaced, 3)).toEqual({ listId: 2, index: 0 })
     expect(replaced.lists[1].cards[0].completedAt).toBe('2026-11-05T10:00:00+09:00')
     expect(replaced.lists[0]).toBe(board.lists[0]) // 関係ないリストは、そのまま
+  })
+})
+
+describe('removeCard', () => {
+  it('カードを取り除き、そのリストの件数も減る。ほかのリストは、そのまま', () => {
+    const board = makeBoard()
+
+    const removed = removeCard(board, 1)
+
+    expect(ids(removed, 1)).toEqual([2])
+    expect(removed.lists[0].cardCount).toBe(1)
+    expect(removed.lists[1]).toBe(board.lists[1])
+    expect(removed.lists[2]).toBe(board.lists[2])
+  })
+
+  it('リストの最後の1枚を取り除くと、そのリストは空になる(リストは残る)', () => {
+    const removed = removeCard(makeBoard(), 5)
+
+    expect(ids(removed, 3)).toEqual([])
+    expect(removed.lists).toHaveLength(3)
+  })
+
+  it('元のボードは変えない。カードが無いときは、元のボードのまま', () => {
+    const board = makeBoard()
+    const before = JSON.stringify(board)
+
+    expect(removeCard(board, 999)).toBe(board)
+    removeCard(board, 1)
+
+    expect(JSON.stringify(board)).toBe(before)
   })
 })

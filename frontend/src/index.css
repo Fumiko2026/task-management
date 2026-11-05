@@ -313,6 +313,154 @@ body {
   cursor: pointer;
 }
 
+/* ---- カードの編集ダイアログ ---- */
+
+.dialog {
+  width: min(92vw, 440px);
+  max-height: 92dvh;
+  padding: 0;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
+}
+
+/* 開いている間、後ろのボードを、暗くする(ほかは操作できない) */
+.dialog::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+/* スマホ: 画面の下から出る形(ボトムシート) */
+@media (max-width: 767px) {
+  .dialog {
+    width: 100%;
+    max-width: none;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  /* 背景のタップで閉じるため、ダイアログの中身は、すき間なく、この箱で覆う */
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.dialog-card-title {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dialog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.dialog-section-title {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-sub);
+}
+
+.dialog-message {
+  margin: 0;
+}
+
+.dialog-due {
+  margin: 0;
+  align-self: flex-start;
+  font-size: 1rem;
+}
+
+.dialog-quick {
+  display: flex;
+  gap: 8px;
+}
+
+.dialog-quick .button {
+  flex: 1;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--text-sub);
+}
+
+.dialog-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  /* 16px 未満だと、iPhone の Safari が、入力のたびに画面を拡大してしまう。
+     まわりの文字(ラベルは 14px)を引き継がず、1rem(16px)にそろえる */
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dialog-input:focus-visible,
+.dialog .button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialog-actions .button {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* 削除は、ほかの操作と、少し離して置く */
+.dialog-danger {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.button.button--danger {
+  background: var(--due-overdue-text);
+}
+
+.button.button--danger-outline {
+  color: var(--due-overdue-text);
+  background: var(--bg-card);
+  border: 1px solid var(--due-overdue-text);
+}
+
+/* 削除したあとの知らせ(緑) */
+.toast--ok {
+  color: var(--due-done-text);
+  background: var(--due-done-bg);
+  border-color: var(--due-done-text);
+}
+
+.toast-close--ok {
+  color: var(--due-done-text);
+  border-color: var(--due-done-text);
+}
+
 /* ---- カードを追加 ---- */
 
 .add-card-button {

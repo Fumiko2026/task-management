@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, fetchBoard, moveCard as requestMoveCard } from '../api/client'
-import type { BoardView, CardView } from '../api/types'
-import { moveCardInBoard, replaceCard } from '../lib/boardMove'
+import {
+  ApiError,
+  deleteCard as requestDeleteCard,
+  fetchBoard,
+  moveCard as requestMoveCard,
+  updateCard as requestUpdateCard,
+} from '../api/client'
+import type { BoardView, CardView, UpdateCardRequest } from '../api/types'
+import { moveCardInBoard, removeCard, replaceCard } from '../lib/boardMove'
 import type { CardPlace } from '../lib/boardMove'
 
 /** ボードの読み込みの状態。画面は、この状態に合わせて表示を切り替える。 */
@@ -82,5 +88,44 @@ export function useBoard() {
     }
   }, [])
 
-  return { state, reload, addCard, moveCard }
+  /**
+   * カードを更新する(いまは、期限だけ)。保存できたら、返ってきたカード(期限の状態が新しい)で置き換える。
+   * 成功なら null、失敗なら理由(日本語の文)を返す。失敗のときは、ボードは変えない。
+   */
+  const updateCard = useCallback(async (cardId: number, changes: UpdateCardRequest): Promise<string | null> => {
+    try {
+      const saved = await requestUpdateCard(cardId, changes)
+      setState((current) =>
+        current.status === 'ready' ? { status: 'ready', board: replaceCard(current.board, saved) } : current,
+      )
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : '不明なエラー'
+    }
+  }, [])
+
+  /**
+   * カードを削除する(DB から本当に消える)。元に戻せないので、先に画面から消さず、
+   * 消せたことが分かってから、画面から取り除く。成功なら null、失敗なら理由を返す。
+   * すでに無かったとき(404)は、もう消えているので、成功と同じに扱う(画面からも取り除く)。
+   */
+  const deleteCard = useCallback(async (cardId: number): Promise<string | null> => {
+    const remove = () =>
+      setState((current) =>
+        current.status === 'ready' ? { status: 'ready', board: removeCard(current.board, cardId) } : current,
+      )
+    try {
+      await requestDeleteCard(cardId)
+      remove()
+      return null
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        remove()
+        return null
+      }
+      return error instanceof Error ? error.message : '不明なエラー'
+    }
+  }, [])
+
+  return { state, reload, addCard, moveCard, updateCard, deleteCard }
 }

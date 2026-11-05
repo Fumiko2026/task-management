@@ -47,6 +47,19 @@ export function moveCardInBoard(board: BoardView, cardId: number, toListId: numb
   return { ...board, lists }
 }
 
+/** カードを取り除いた、新しいボードを返す(削除のあと)。件数 cardCount も、減らす。無ければ、元のボードのまま。 */
+export function removeCard(board: BoardView, cardId: number): BoardView {
+  if (!findCard(board, cardId)) return board
+  return {
+    ...board,
+    lists: board.lists.map((list) => {
+      if (!list.cards.some((c) => c.id === cardId)) return list
+      const cards = list.cards.filter((c) => c.id !== cardId)
+      return { ...list, cards, cardCount: cards.length }
+    }),
+  }
+}
+
 /** サーバーから返ってきたカードで、同じ id のカードを置き換える(完了日時や期限の状態が、新しくなる)。 */
 export function replaceCard(board: BoardView, card: CardView): BoardView {
   return {

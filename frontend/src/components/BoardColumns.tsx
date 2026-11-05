@@ -1,6 +1,7 @@
 import {
   DndContext,
   DragOverlay,
+  KeyboardCode,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
@@ -64,10 +65,12 @@ export function BoardColumns({
   board,
   onCardAdded,
   onMoveCard,
+  onOpenCard,
 }: {
   board: BoardView
   onCardAdded: (listId: number, card: CardView) => void
   onMoveCard: (cardId: number, from: CardPlace, to: CardPlace) => void
+  onOpenCard: (cardId: number) => void
 }) {
   const [dragBoard, setDragBoard] = useState<BoardView | null>(null)
   const [activeCardId, setActiveCardId] = useState<number | null>(null)
@@ -78,8 +81,11 @@ export function BoardColumns({
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     // タッチ: 約 0.5 秒の長押しで始まる。それより前の指の動きは、今までどおり、スクロール
     useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 8 } }),
-    // キーボード: Space で持ち上げ、矢印で動かし、Space で置く
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    // キーボード: Space で持ち上げ、矢印で動かし、Space で置く(Enter は、編集ダイアログを開くために、使わない)
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: [KeyboardCode.Space], cancel: [KeyboardCode.Esc], end: [KeyboardCode.Space] },
+    }),
   )
 
   function reset() {
@@ -163,7 +169,12 @@ export function BoardColumns({
     >
       <div className="lists">
         {shown.lists.map((list) => (
-          <ListColumn key={list.id} list={list} onCardAdded={(card) => onCardAdded(list.id, card)} />
+          <ListColumn
+            key={list.id}
+            list={list}
+            onCardAdded={(card) => onCardAdded(list.id, card)}
+            onOpenCard={onOpenCard}
+          />
         ))}
       </div>
       {/* 持ち上げているカード。指やマウスについてくる */}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeCard } from '../test/fixtures'
-import { dueDisplay, formatDueDate } from './formatDue'
+import { dueDisplay, formatDueDate, formatDueDateTime } from './formatDue'
 
 describe('formatDueDate', () => {
   it('日付を「月/日」の短い形にする', () => {
@@ -42,5 +42,19 @@ describe('dueDisplay', () => {
   it('完了は、アイコンと「完了」', () => {
     const card = makeCard({ dueStatus: 'COMPLETED', dueIcon: '✔', dueLabel: '完了', dueAt })
     expect(dueDisplay(card)).toEqual({ icon: '✔', text: '完了' })
+  })
+})
+
+describe('formatDueDateTime', () => {
+  it('「月/日(曜日) 時:分」の形(日本時間)', () => {
+    expect(formatDueDateTime('2026-11-10T18:00:00+09:00')).toBe('11/10(火) 18:00')
+  })
+
+  it('UTC で届いても、日本時間で出す(日付がまたぐ場合も)', () => {
+    expect(formatDueDateTime('2026-11-10T15:30:00Z')).toBe('11/11(水) 00:30')
+  })
+
+  it('0 時台は、00 と出る(24 時間表記)', () => {
+    expect(formatDueDateTime('2026-11-10T00:05:00+09:00')).toBe('11/10(火) 00:05')
   })
 })

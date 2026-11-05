@@ -56,6 +56,11 @@ export interface BoardView {
   lists: ListView[]
 }
 
+/** PATCH /api/cards/{id} に送る内容。いまは、期限だけ。dueAt は、時差つきの日時の文字(消すときは null)。 */
+export interface UpdateCardRequest {
+  dueAt: string | null
+}
+
 /** PATCH /api/cards/{id}/move に送る内容。移し先のリストの id と、移し先で何番目か(1 から)。 */
 export interface MoveCardRequest {
   listId: number
