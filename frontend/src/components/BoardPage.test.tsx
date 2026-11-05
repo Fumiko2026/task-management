@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BoardView } from '../api/types'
@@ -193,5 +193,119 @@ describe('BoardPage', () => {
       expect(todo.getByLabelText('2件')).toBeInTheDocument()
       expect(todo.queryByRole('heading', { name: '請求書を送る' })).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('BoardPage: カードを押すと、編集ダイアログが開く', () => {
+  const estimate = { id: 1, title: '見積書を作る' }
+
+  it('カードを押すと、そのカードのダイアログが開く。「キャンセル」で閉じる', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(makeBoard())))
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: estimate.title }))
+
+    const dialog = screen.getByRole('dialog', { name: 'カードを編集' })
+    expect(dialog).toHaveTextContent(estimate.title)
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('Enter キーでも開く', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(makeBoard())))
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    const card = (await screen.findByRole('heading', { name: estimate.title })).closest('li')!
+
+    card.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByRole('dialog', { name: 'カードを編集' })).toBeInTheDocument()
+  })
+
+  it('期限を変えて「決定」すると、ダイアログが閉じ、カードの表示が、すぐ変わる', async () => {
+    const saved = makeCard({
+      id: 1,
+      title: '見積書を作る',
+      dueAt: '2026-12-24T09:30:00+09:00',
+      dueStatus: 'NORMAL',
+      dueIcon: '🕒',
+      dueLabel: '通常',
+    })
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(jsonResponse(saved))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    expect(await screen.findByText(/11\/2 超過/)).toBeInTheDocument() // 変える前は、超過
+
+    await user.click(screen.getByRole('heading', { name: estimate.title }))
+    fireEvent.change(screen.getByLabelText('日付と時刻'), { target: { value: '2026-12-24T09:30' } })
+    await user.click(screen.getByRole('button', { name: '決定' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByText(/11\/2 超過/)).not.toBeInTheDocument()
+    expect(screen.getByText(/12\/24/)).toBeInTheDocument()
+    const [url, init] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/cards/1')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body)).toEqual({ dueAt: '2026-12-24T09:30:00+09:00' })
+  })
+
+  it('保存に失敗したら、ダイアログは開いたまま、理由が出て、カードの表示は変わらない', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'サーバーの調子が悪いようです' }, 500))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    await screen.findByText(/11\/2 超過/)
+
+    await user.click(screen.getByRole('heading', { name: estimate.title }))
+    fireEvent.change(screen.getByLabelText('日付と時刻'), { target: { value: '2026-12-24T09:30' } })
+    await user.click(screen.getByRole('button', { name: '決定' }))
+
+    expect(await screen.findByText('保存できませんでした。サーバーの調子が悪いようです')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText(/11\/2 超過/)).toBeInTheDocument()
+  })
+
+  it('削除は、確認してから。「削除する」で、画面からカードが消え、件数が減り、知らせが出る', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    const todo = within(await screen.findByRole('region', { name: '未着手' }))
+    expect(todo.getByLabelText('2件')).toBeInTheDocument()
+
+    await user.click(todo.getByRole('heading', { name: estimate.title }))
+    await user.click(screen.getByRole('button', { name: 'このカードを削除' }))
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 確認の画面では、まだ消していない
+    await user.click(screen.getByRole('button', { name: '削除する' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(todo.queryByRole('heading', { name: estimate.title })).not.toBeInTheDocument()
+    expect(todo.getByLabelText('1件')).toBeInTheDocument()
+    expect(screen.getByText('「見積書を作る」を削除しました')).toBeInTheDocument() // 画面の下の知らせ
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/cards/1')
+    expect(fetchMock.mock.calls[1][1].method).toBe('DELETE')
+  })
+
+  it('削除に失敗したら、カードは消えず、確認の画面に理由が出る', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'サーバーの調子が悪いようです' }, 500))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: estimate.title }))
+    await user.click(screen.getByRole('button', { name: 'このカードを削除' }))
+    await user.click(screen.getByRole('button', { name: '削除する' }))
+
+    expect(await screen.findByText('削除できませんでした。サーバーの調子が悪いようです')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: '未着手' })).getByRole('heading', { name: estimate.title })).toBeInTheDocument()
   })
 })

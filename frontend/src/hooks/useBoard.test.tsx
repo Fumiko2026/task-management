@@ -105,3 +105,87 @@ describe('useBoard の moveCard', () => {
     expect(findCard(board, 50)).not.toBeNull() // 追加したカードも残っている
   })
 })
+
+describe('useBoard の updateCard', () => {
+  it('保存できたら、返ってきたカード(期限の状態が新しい)で置き換える', async () => {
+    const saved = makeCard({ id: 1, title: '見積書を作る', dueAt: '2026-12-01T18:00:00+09:00', dueStatus: 'NORMAL', dueIcon: '🕒', dueLabel: '通常' })
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(jsonResponse(saved))
+    const hook = await loaded(fetchMock)
+
+    let result: string | null = 'まだ'
+    await act(async () => {
+      result = await hook.result.current.updateCard(1, { dueAt: '2026-12-01T18:00:00+09:00' })
+    })
+
+    expect(result).toBeNull()
+    expect(boardOf(hook).lists[0].cards[0].dueStatus).toBe('NORMAL')
+    expect(findCard(boardOf(hook), 1)).toEqual({ listId: 1, index: 0 }) // 場所は変わらない
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/cards/1')
+  })
+
+  it('失敗したら、理由を返し、ボードは変えない', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: '期限の日時の形が正しくありません' }, 400))
+    const hook = await loaded(fetchMock)
+    const before = boardOf(hook)
+
+    let result: string | null = null
+    await act(async () => {
+      result = await hook.result.current.updateCard(1, { dueAt: 'あした' })
+    })
+
+    expect(result).toBe('期限の日時の形が正しくありません')
+    expect(boardOf(hook)).toBe(before)
+  })
+})
+
+describe('useBoard の deleteCard', () => {
+  it('消せたら、画面からカードを取り除き、件数も減らす', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(new Response(null, { status: 204 }))
+    const hook = await loaded(fetchMock)
+
+    let result: string | null = 'まだ'
+    await act(async () => {
+      result = await hook.result.current.deleteCard(1)
+    })
+
+    expect(result).toBeNull()
+    expect(findCard(boardOf(hook), 1)).toBeNull()
+    expect(boardOf(hook).lists.map((l) => l.cardCount)).toEqual([1, 1, 1])
+    expect(fetchMock.mock.calls[1][1].method).toBe('DELETE')
+  })
+
+  it('消せなかったら、理由を返し、カードは画面に残す(先に消さない)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'サーバーの調子が悪いようです' }, 500))
+    const hook = await loaded(fetchMock)
+
+    let result: string | null = null
+    await act(async () => {
+      result = await hook.result.current.deleteCard(1)
+    })
+
+    expect(result).toBe('サーバーの調子が悪いようです')
+    expect(findCard(boardOf(hook), 1)).not.toBeNull()
+  })
+
+  it('すでに無かった(404)ときは、もう消えているので、成功と同じに扱い、画面からも取り除く', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'カードが見つかりません(id=1)' }, 404))
+    const hook = await loaded(fetchMock)
+
+    let result: string | null = 'まだ'
+    await act(async () => {
+      result = await hook.result.current.deleteCard(1)
+    })
+
+    expect(result).toBeNull()
+    expect(findCard(boardOf(hook), 1)).toBeNull()
+  })
+})

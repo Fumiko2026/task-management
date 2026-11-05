@@ -11,7 +11,15 @@ import { SortableCard } from './SortableCard'
  * (完了のリストにあるカードは、完了日時が記録されたカードのため)。
  * リスト全体が、カードを置ける場所になる(カードが 0 枚のリストにも、置ける)。
  */
-export function ListColumn({ list, onCardAdded }: { list: ListView; onCardAdded: (card: CardView) => void }) {
+export function ListColumn({
+  list,
+  onCardAdded,
+  onOpenCard,
+}: {
+  list: ListView
+  onCardAdded: (card: CardView) => void
+  onOpenCard: (cardId: number) => void
+}) {
   // このリストを、カードを置ける場所にする
   const { setNodeRef } = useDroppable({ id: listDndId(list.id) })
 
@@ -30,7 +38,7 @@ export function ListColumn({ list, onCardAdded }: { list: ListView; onCardAdded:
         ) : (
           <ul className="list-cards">
             {list.cards.map((card) => (
-              <SortableCard key={card.id} card={card} />
+              <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
             ))}
           </ul>
         )}

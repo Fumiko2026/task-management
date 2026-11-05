@@ -1,4 +1,4 @@
-import type { BoardView, CardView, CreateCardRequest, MoveCardRequest } from './types'
+import type { BoardView, CardView, CreateCardRequest, MoveCardRequest, UpdateCardRequest } from './types'
 
 /** API の呼び出しに失敗したとき。status は HTTP の番号(通信そのものが失敗したときは 0)。 */
 export class ApiError extends Error {
@@ -72,6 +72,46 @@ export async function moveCard(cardId: number, listId: number, position: number)
     throw new ApiError(response.status, await readMessage(response))
   }
   return (await response.json()) as CardView
+}
+
+/**
+ * PATCH /api/cards/{id} : カードを更新する(いまは、期限だけ)。dueAt は、時差つきの日時(例: 2026-11-10T18:00:00+09:00)。
+ * null を送ると、期限が消える。更新できたら、更新後のカード(期限の状態も新しい値)を返す。
+ * 失敗(日時の形が正しくない 400、カードが無い 404 など)は、API の理由を持つ ApiError にする。
+ */
+export async function updateCard(cardId: number, changes: UpdateCardRequest): Promise<CardView> {
+  let response: Response
+  try {
+    response = await fetch(`/api/cards/${cardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(changes),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
+}
+
+/**
+ * DELETE /api/cards/{id} : カードを削除する(DB から本当に消える。元に戻せない)。
+ * 消せたら、何も返さない(204)。カードが無い 404 などは、API の理由を持つ ApiError にする。
+ */
+export async function deleteCard(cardId: number): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(`/api/cards/${cardId}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
 }
 
 /** エラー応答の {"message": "..."} から理由を取り出す。読めなければ、番号だけの文にする。 */
