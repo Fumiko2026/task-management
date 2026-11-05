@@ -54,7 +54,15 @@ public class InMemoryBoardRepository implements BoardRepository {
 
 	@Override
 	public Optional<CardLocation> findCardLocation(long cardId) {
-		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの移動に対応していません");
+		Board board = sampleBoard();
+		for (TaskList list : board.lists()) {
+			for (Card card : list.cards()) {
+				if (card.id() == cardId) {
+					return Optional.of(new CardLocation(cardId, list.id(), board.id(), card.completedAt()));
+				}
+			}
+		}
+		return Optional.empty();
 	}
 
 	@Override
@@ -65,6 +73,11 @@ public class InMemoryBoardRepository implements BoardRepository {
 	@Override
 	public void updateDueAt(long cardId, OffsetDateTime dueAt) {
 		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの更新に対応していません");
+	}
+
+	@Override
+	public void deleteCard(long cardId) {
+		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの削除に対応していません");
 	}
 
 	private Stream<Card> allCards() {

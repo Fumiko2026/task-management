@@ -215,4 +215,13 @@ class BoardServiceTest {
 				.hasMessageContaining("カードが見つかりません");
 	}
 
+	// ---- カードの削除 ----
+
+	@Test
+	void 削除_カードが無いと_404() {
+		assertThatThrownBy(() -> service.deleteCard(999L))
+				.isInstanceOf(NotFoundException.class)
+				.hasMessageContaining("カードが見つかりません");
+	}
+
 }

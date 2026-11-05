@@ -305,4 +305,66 @@ class JdbcBoardRepositoryTest {
 		assertThat(repository.findCard(ids.laterCardId()).orElseThrow().dueAt()).isEqualTo(laterDue);
 	}
 
+	// ---- カードの削除 ----
+
+	@Test
+	void カードを消すと_行もチェックリストも消え_残ったカードの並び順が連番になる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		// 見積書を作る(未着手の1番目)には、チェックリストが2つある
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM checklist_items WHERE card_id = ?", Integer.class,
+				ids.estimateCardId())).isEqualTo(2);
+
+		repository.deleteCard(ids.estimateCardId());
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM cards WHERE id = ?", Integer.class, ids.estimateCardId()))
+				.isZero();
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM checklist_items WHERE card_id = ?", Integer.class,
+				ids.estimateCardId())).isZero(); // チェックリストも消えた
+		assertThat(titles(ids.todoListId())).containsExactly("資料をまとめる", "資料を送る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2); // 欠番(1)ができない
+	}
+
+	@Test
+	void 真ん中のカードを消しても_順番は保たれ連番になる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.deleteCard(ids.noDueCardId());
+
+		assertThat(titles(ids.todoListId())).containsExactly("見積書を作る", "資料を送る");
+		assertThat(positions(ids.todoListId())).containsExactly(1, 2);
+	}
+
+	@Test
+	void 消したのは1枚だけで_ほかのリストやカードは変わらない() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+		int cardsBefore = jdbc.queryForObject("SELECT count(*) FROM cards", Integer.class);
+
+		repository.deleteCard(ids.laterCardId());
+
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM cards", Integer.class)).isEqualTo(cardsBefore - 1);
+		assertThat(titles(ids.doneListId())).containsExactly("契約書の確認");
+		assertThat(positions(ids.doneListId())).containsExactly(1);
+		assertThat(repository.findCard(ids.estimateCardId())).isPresent();
+	}
+
+	@Test
+	void リストに1枚だけのカードを消すと_リストは空になる() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.deleteCard(ids.doneCardId());
+
+		assertThat(titles(ids.doneListId())).isEmpty();
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM lists WHERE id = ?", Integer.class, ids.doneListId()))
+				.isEqualTo(1); // リストは残る
+	}
+
+	@Test
+	void 無いカードを消そうとしても_何も起きない() {
+		BoardTestData.Ids ids = BoardTestData.insert(jdbc);
+
+		repository.deleteCard(-1);
+
+		assertThat(titles(ids.todoListId())).hasSize(3);
+	}
+
 }

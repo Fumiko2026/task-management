@@ -142,6 +142,21 @@ public class JdbcBoardRepository implements BoardRepository {
 		jdbc.update("UPDATE cards SET due_at = ?, updated_at = now() WHERE id = ?", dueAt, cardId);
 	}
 
+	@Override
+	public void deleteCard(long cardId) {
+		List<Long> lists = jdbc.queryForList("SELECT list_id FROM cards WHERE id = ?", Long.class, cardId);
+		if (lists.isEmpty()) {
+			return; // もう無い
+		}
+		long listId = lists.get(0);
+
+		// チェックリストの項目は、cards への参照が ON DELETE CASCADE なので、一緒に消える
+		jdbc.update("DELETE FROM cards WHERE id = ?", cardId);
+
+		// 残ったカードを、1,2,3… と振り直す(欠番を作らない)
+		renumber(jdbc.queryForList("SELECT id FROM cards WHERE list_id = ? ORDER BY position, id", Long.class, listId));
+	}
+
 	/** カードの id の並びどおりに、position を 1,2,3… と振り直す。 */
 	private void renumber(List<Long> cardIdsInOrder) {
 		jdbc.batchUpdate("UPDATE cards SET position = ? WHERE id = ?", cardIdsInOrder, cardIdsInOrder.size(),

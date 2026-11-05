@@ -148,6 +148,18 @@ public class BoardService {
 		return toCardView(updated, OffsetDateTime.now(clock));
 	}
 
+	/**
+	 * カードを削除する(物理削除。DB から本当に消える。元に戻せない)。
+	 * そのカードのチェックリストも、一緒に消える。同じリストに残ったカードの並び順は、1,2,3… に振り直す。
+	 * カードが無ければ NotFoundException(404)。
+	 */
+	@Transactional
+	public void deleteCard(long cardId) {
+		repository.findCardLocation(cardId)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
+		repository.deleteCard(cardId);
+	}
+
 	/** 期限の値を読む。null はそのまま(期限を消す)。文字は、時差つきの日時として読む。 */
 	private OffsetDateTime parseDueAt(Object value) {
 		if (value == null) {
