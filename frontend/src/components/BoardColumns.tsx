@@ -66,11 +66,13 @@ export function BoardColumns({
   onCardAdded,
   onMoveCard,
   onOpenCard,
+  onToggleComplete,
 }: {
   board: BoardView
   onCardAdded: (listId: number, card: CardView) => void
   onMoveCard: (cardId: number, from: CardPlace, to: CardPlace) => void
   onOpenCard: (cardId: number) => void
+  onToggleComplete: (card: CardView) => void
 }) {
   const [dragBoard, setDragBoard] = useState<BoardView | null>(null)
   const [activeCardId, setActiveCardId] = useState<number | null>(null)
@@ -174,6 +176,7 @@ export function BoardColumns({
             list={list}
             onCardAdded={(card) => onCardAdded(list.id, card)}
             onOpenCard={onOpenCard}
+            onToggleComplete={onToggleComplete}
           />
         ))}
       </div>

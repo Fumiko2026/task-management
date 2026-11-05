@@ -1,4 +1,11 @@
-import type { BoardView, CardView, CreateCardRequest, MoveCardRequest, UpdateCardRequest } from './types'
+import type {
+  BoardView,
+  CardView,
+  CompleteCardRequest,
+  CreateCardRequest,
+  MoveCardRequest,
+  UpdateCardRequest,
+} from './types'
 
 /** API の呼び出しに失敗したとき。status は HTTP の番号(通信そのものが失敗したときは 0)。 */
 export class ApiError extends Error {
@@ -112,6 +119,30 @@ export async function deleteCard(cardId: number): Promise<void> {
   if (!response.ok) {
     throw new ApiError(response.status, await readMessage(response))
   }
+}
+
+/**
+ * PATCH /api/cards/{id}/complete : カードを完了にする(completed = true)、または未完了に戻す(false)。
+ * 完了にすると「完了」リストのいちばん上へ。未完了に戻すと、完了前にいたリストの最後へ(position で位置も指定できる)。
+ * 更新後のカードを返す。失敗(カードが無い 404 など)は、API の理由を持つ ApiError にする。
+ */
+export async function completeCard(cardId: number, completed: boolean, position?: number): Promise<CardView> {
+  const request: CompleteCardRequest = position === undefined ? { completed } : { completed, position }
+  let response: Response
+  try {
+    response = await fetch(`/api/cards/${cardId}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
 }
 
 /** エラー応答の {"message": "..."} から理由を取り出す。読めなければ、番号だけの文にする。 */

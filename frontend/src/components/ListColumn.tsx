@@ -15,10 +15,12 @@ export function ListColumn({
   list,
   onCardAdded,
   onOpenCard,
+  onToggleComplete,
 }: {
   list: ListView
   onCardAdded: (card: CardView) => void
   onOpenCard: (cardId: number) => void
+  onToggleComplete: (card: CardView) => void
 }) {
   // このリストを、カードを置ける場所にする
   const { setNodeRef } = useDroppable({ id: listDndId(list.id) })
@@ -38,7 +40,7 @@ export function ListColumn({
         ) : (
           <ul className="list-cards">
             {list.cards.map((card) => (
-              <SortableCard key={card.id} card={card} onOpen={onOpenCard} />
+              <SortableCard key={card.id} card={card} onOpen={onOpenCard} onToggleComplete={onToggleComplete} />
             ))}
           </ul>
         )}

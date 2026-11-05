@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { BoardView } from '../api/types'
+import { moveCardInBoard, replaceCard } from '../lib/boardMove'
 import { jsonResponse, makeBoard, makeCard, makeList } from '../test/fixtures'
 import { BoardPage } from './BoardPage'
 
@@ -307,5 +308,133 @@ describe('BoardPage: カードを押すと、編集ダイアログが開く', ()
 
     expect(await screen.findByText('削除できませんでした。サーバーの調子が悪いようです')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: '未着手' })).getByRole('heading', { name: estimate.title })).toBeInTheDocument()
+  })
+})
+
+describe('BoardPage: 完了マーク(○/✔)', () => {
+  // makeBoard(): 未着手(カード 1 見積書を作る(チェック 3/5)、2 資料をまとめる)/ 進行中(3 部長に報告)/ 完了(5 契約書の確認)
+  const doneAt = '2026-11-06T10:00:00+09:00'
+  const reportDone = makeCard({ id: 3, title: '部長に報告', completedAt: doneAt, dueStatus: 'COMPLETED', dueIcon: '✔', dueLabel: '完了' })
+
+  /** 通信の差し替え。ボードの中身(board)を、完了・未完了のたびに、サーバーの結果のように書き換える。 */
+  function server() {
+    let board = makeBoard()
+    const handler = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/board') return Promise.resolve(jsonResponse(board))
+      const body = init?.body ? JSON.parse(init.body as string) : {}
+      if (url === '/api/cards/3/complete' && body.completed === true) {
+        board = replaceCard(moveCardInBoard(board, 3, 3, 0), reportDone) // 「完了」のいちばん上へ
+        return Promise.resolve(jsonResponse(reportDone))
+      }
+      if (url === '/api/cards/3/complete' && body.completed === false) {
+        board = moveCardInBoard(replaceCard(board, makeCard({ id: 3, title: '部長に報告' })), 3, 2, 0)
+        return Promise.resolve(jsonResponse(makeCard({ id: 3, title: '部長に報告' })))
+      }
+      if (url === '/api/cards/5/complete') {
+        board = replaceCard(board, makeCard({ id: 5, title: '契約書の確認' }))
+        return Promise.resolve(jsonResponse(makeCard({ id: 5, title: '契約書の確認' })))
+      }
+      if (url === '/api/cards/1/complete') {
+        board = replaceCard(moveCardInBoard(board, 1, 3, 0), makeCard({ id: 1, title: '見積書を作る', completedAt: doneAt }))
+        return Promise.resolve(jsonResponse(makeCard({ id: 1, title: '見積書を作る', completedAt: doneAt })))
+      }
+      return Promise.reject(new Error(`想定していない通信: ${url}`))
+    })
+    vi.stubGlobal('fetch', handler)
+    return handler
+  }
+  const patches = (handler: ReturnType<typeof server>) =>
+    handler.mock.calls.filter(([url]) => String(url).endsWith('/complete')).map(([url, init]) => [url, JSON.parse(init!.body as string)])
+
+  it('○ を押すと、完了にして、カードが「完了」のいちばん上へ移る。編集ダイアログは開かない', async () => {
+    const handler = server()
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('button', { name: '完了にする: 部長に報告' }))
+
+    const done = within(await screen.findByRole('region', { name: '完了' }))
+    expect(await done.findByRole('button', { name: '未完了に戻す: 部長に報告' })).toBeInTheDocument()
+    expect(done.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['部長に報告', '契約書の確認'])
+    expect(patches(handler)).toEqual([['/api/cards/3/complete', { completed: true }]])
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('完了にしたら、「完了にしました [元に戻す]」の知らせが出る。「元に戻す」で、もとの位置(1 から数えて 1 番目)へ戻る', async () => {
+    const handler = server()
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    await user.click(await screen.findByRole('button', { name: '完了にする: 部長に報告' }))
+
+    expect(await screen.findByText('「部長に報告」を完了にしました')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '元に戻す' }))
+
+    const doing = within(await screen.findByRole('region', { name: '進行中' }))
+    expect(await doing.findByRole('heading', { name: '部長に報告' })).toBeInTheDocument()
+    expect(screen.queryByText('「部長に報告」を完了にしました')).not.toBeInTheDocument()
+    expect(patches(handler)).toEqual([
+      ['/api/cards/3/complete', { completed: true }],
+      ['/api/cards/3/complete', { completed: false, position: 1 }], // もとは、進行中の 0 番目 = 1 番目
+    ])
+  })
+
+  it('✔ を押すと、未完了に戻す(位置は指定しない)。知らせに「元に戻す」は出ない', async () => {
+    const handler = server()
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('button', { name: '未完了に戻す: 契約書の確認' }))
+
+    expect(await screen.findByText('「契約書の確認」を未完了に戻しました')).toBeInTheDocument()
+    expect(patches(handler)).toEqual([['/api/cards/5/complete', { completed: false }]])
+    expect(screen.queryByRole('button', { name: '元に戻す' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '完了にする: 契約書の確認' })).toBeInTheDocument()
+  })
+
+  it('チェック項目が残っているカードは、先に確認する。「やめる」では、何も送らない', async () => {
+    const handler = server()
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('button', { name: '完了にする: 見積書を作る' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'チェックリストが残っています' })
+    expect(dialog).toHaveTextContent('「見積書を作る」には、まだ終わっていない手順が 2 件あります。完了にしますか')
+    await user.click(within(dialog).getByRole('button', { name: 'やめる' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(patches(handler)).toEqual([])
+  })
+
+  it('確認で「完了にする」を押すと、完了にする', async () => {
+    const handler = server()
+    const user = userEvent.setup()
+    render(<BoardPage />)
+    await user.click(await screen.findByRole('button', { name: '完了にする: 見積書を作る' }))
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '完了にする' }))
+
+    expect(await screen.findByText('「見積書を作る」を完了にしました')).toBeInTheDocument()
+    expect(patches(handler)).toEqual([['/api/cards/1/complete', { completed: true }]])
+    const done = within(screen.getByRole('region', { name: '完了' }))
+    await vi.waitFor(() => expect(done.getByRole('heading', { name: '見積書を作る' })).toBeInTheDocument())
+  })
+
+  it('保存に失敗したら、理由を出し、カードは動かない', async () => {
+    const handler = vi.fn((url: string) =>
+      Promise.resolve(
+        url === '/api/board' ? jsonResponse(makeBoard()) : jsonResponse({ message: 'サーバーの調子が悪いようです' }, 500),
+      ),
+    )
+    vi.stubGlobal('fetch', handler)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('button', { name: '完了にする: 部長に報告' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした。サーバーの調子が悪いようです')
+    const doing = within(screen.getByRole('region', { name: '進行中' }))
+    expect(doing.getByRole('heading', { name: '部長に報告' })).toBeInTheDocument()
+    expect(screen.queryByText('「部長に報告」を完了にしました')).not.toBeInTheDocument()
   })
 })

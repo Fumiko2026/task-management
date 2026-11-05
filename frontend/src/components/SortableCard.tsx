@@ -10,7 +10,15 @@ import { CardItem } from './CardItem'
  *   キーボード: フォーカスして Space で持ち上げ、矢印で動かし、Space で置く(Esc で取り消し)。
  * 持ち上げている間、元の場所には、薄いカードが残る。
  */
-export function SortableCard({ card, onOpen }: { card: CardView; onOpen: (cardId: number) => void }) {
+export function SortableCard({
+  card,
+  onOpen,
+  onToggleComplete,
+}: {
+  card: CardView
+  onOpen: (cardId: number) => void
+  onToggleComplete: (card: CardView) => void
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDndId(card.id),
     // 既定の role="button" だと、カードの中の見出しなどが、読み上げで失われる。一覧の項目のままにする
@@ -37,7 +45,7 @@ export function SortableCard({ card, onOpen }: { card: CardView; onOpen: (cardId
         }
       }}
     >
-      <CardItem card={card} />
+      <CardItem card={card} onToggleComplete={onToggleComplete} />
     </li>
   )
 }

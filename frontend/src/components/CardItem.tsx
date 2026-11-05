@@ -1,20 +1,52 @@
 import type { CardView } from '../api/types'
 import { dueDisplay } from '../lib/formatDue'
 
+/** 完了マークのボタンを押したとき、ドラッグの開始や、編集ダイアログの表示に、伝わらないようにする。 */
+const stopPropagation = (event: { stopPropagation: () => void }) => event.stopPropagation()
+
 /**
  * カード1枚。幅が狭いため、情報を絞って表示する(画面仕様 §3-④)。
- * いまは表示だけ。完了マークも、押しても何も起きない(完了の操作は次の段階で作る)。
+ * onToggleComplete を渡すと、完了マーク(○/✔)が押せるボタンになる(押せる範囲は 44×44px 以上)。
+ * 渡さないとき(ドラッグ中に浮いているカードなど)は、表示だけ。
+ * ボタンを押しても、カードのドラッグは始まらず、編集ダイアログも開かない。
  */
-export function CardItem({ card, className = '' }: { card: CardView; className?: string }) {
+export function CardItem({
+  card,
+  className = '',
+  onToggleComplete,
+}: {
+  card: CardView
+  className?: string
+  onToggleComplete?: (card: CardView) => void
+}) {
   const done = card.completedAt !== null
   const due = dueDisplay(card)
 
   return (
     <article className={`card${done ? ' card--done' : ''}${className ? ` ${className}` : ''}`}>
       <div className="card-top">
-        <span className="card-mark" role="img" aria-label={done ? '完了済み' : '未完了'}>
-          {done ? '✔' : '○'}
-        </span>
+        {onToggleComplete ? (
+          <button
+            type="button"
+            className="card-mark card-mark-button"
+            aria-label={done ? `未完了に戻す: ${card.title}` : `完了にする: ${card.title}`}
+            onClick={(event) => {
+              event.stopPropagation() // カードの「開く」に、伝えない
+              onToggleComplete(card)
+            }}
+            // ドラッグの部品(マウス・タッチ・キーボード)と、カードの Enter / クリックに、伝えない
+            onPointerDown={stopPropagation}
+            onMouseDown={stopPropagation}
+            onTouchStart={stopPropagation}
+            onKeyDown={stopPropagation}
+          >
+            {done ? '✔' : '○'}
+          </button>
+        ) : (
+          <span className="card-mark" role="img" aria-label={done ? '完了済み' : '未完了'}>
+            {done ? '✔' : '○'}
+          </span>
+        )}
         <h3 className="card-title">{card.title}</h3>
       </div>
 

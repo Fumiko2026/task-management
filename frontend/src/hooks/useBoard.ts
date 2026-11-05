@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError,
+  completeCard as requestCompleteCard,
   deleteCard as requestDeleteCard,
   fetchBoard,
   moveCard as requestMoveCard,
@@ -127,5 +128,36 @@ export function useBoard() {
     }
   }, [])
 
-  return { state, reload, addCard, moveCard, updateCard, deleteCard }
+  /**
+   * ボードを取り直す(読み込み中の灰色の枠は出さない)。完了・未完了のあと、置き場所(並び順・件数)を、
+   * サーバーの結果にそろえるために使う。取り直せなかったときは、いまの画面を、そのまま残す。
+   */
+  const refresh = useCallback(async () => {
+    try {
+      const board = await fetchBoard()
+      setState({ status: 'ready', board })
+    } catch {
+      // いまの画面を残す
+    }
+  }, [])
+
+  /**
+   * カードを完了にする(completed = true)、または未完了に戻す(false)。
+   * 置き場所の計算は、サーバーに任せる(完了は「完了」リストのいちばん上、戻すときは完了前のリストの最後。
+   * position で位置も指定できる)。保存できたら、ボードを取り直す。成功なら null、失敗なら理由を返し、ボードは変えない。
+   */
+  const setCardCompleted = useCallback(
+    async (cardId: number, completed: boolean, position?: number): Promise<string | null> => {
+      try {
+        await requestCompleteCard(cardId, completed, position)
+      } catch (error) {
+        return error instanceof Error ? error.message : '不明なエラー'
+      }
+      await refresh()
+      return null
+    },
+    [refresh],
+  )
+
+  return { state, reload, addCard, moveCard, updateCard, deleteCard, refresh, setCardCompleted }
 }
