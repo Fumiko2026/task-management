@@ -117,7 +117,17 @@ case "${1:-}" in
 		exec ./mvnw spring-boot:run -Dspring-boot.run.profiles=seed
 		;;
 	test)
-		exec ./mvnw test
+		# テストは、開発用の DB とは別の、テスト専用の DB につなぐ(開発のデータを消さないため)。
+		# テスト用の DB が無ければ、ここで作る(同じ Docker の PostgreSQL の中)。
+		TEST_DB="$(read_env POSTGRES_DB)"
+		TEST_DB="${TEST_DB:-taskmanagement}_test"
+		DB_ADMIN="${DB_USER:-taskuser}"
+		if ! docker exec task-management-db psql -U "$DB_ADMIN" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$TEST_DB'" | grep -q 1; then
+			echo "テスト用の DB($TEST_DB)を作ります。"
+			docker exec task-management-db psql -U "$DB_ADMIN" -d postgres -c "CREATE DATABASE \"$TEST_DB\"" >/dev/null \
+				|| fail "テスト用の DB を作れませんでした。"
+		fi
+		exec ./mvnw test "-Dtest.db.url=jdbc:postgresql://localhost:5432/$TEST_DB"
 		;;
 	*)
 		echo "使い方:  ./dev.sh run | seed | test | front | front-phone | front-test | free-port <ポート>"

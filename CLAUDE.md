@@ -77,7 +77,7 @@ git branch                 # 手元に作業ブランチが残っていないか
 docker compose up -d     # DB を起動(プロジェクト直下)
 ./dev.sh run             # アプリを起動(.env からパスワードを自動で読む)
 ./dev.sh seed            # テストデータ(db/seed.sql)を入れて起動
-./dev.sh test            # バックエンドのテスト(DB の起動が必要)
+./dev.sh test            # バックエンドのテスト(DB の起動が必要。開発用とは別の、テスト専用の DB `<DB名>_test` を使う。無ければ自動で作る)
 ./dev.sh front           # フロントエンドを起動(http://localhost:5173。先に ./dev.sh seed でバックエンドを動かす)
 ./dev.sh front-phone     # iPhone など、同じ Wi-Fi の端末から画面を見る(試すときだけ。ログインが無いので、終わったら止める)
 ./dev.sh front-test      # フロントエンドのテスト
@@ -98,7 +98,7 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 - 止めてよいのは、**8080 と 5173 で待ち受けているプロセスだけ**。DB(5432)など、他のポートは止めずに、利用者に状況を伝えて相談する。`pkill java` のように、名前で広く止めない。
 - 何を止めたかを、利用者に報告する(「ポート 8080 を、○○が使っていたので止めました」)。
 - 手順の詳細は、スキル `free-port`(`.claude/skills/free-port/SKILL.md`)を使う。
-`dev.sh` を使わないときは、`cd backend` して `export DB_PASSWORD=...`(`.env` と同じ値)のうえ `./mvnw spring-boot:run` / `./mvnw test`。
+`dev.sh` を使わないときは、`cd backend` して `export DB_PASSWORD=...`(`.env` と同じ値)のうえ `./mvnw spring-boot:run` / `./mvnw test`(`./mvnw test` は、pom の既定で `taskmanagement_test` につなぐ。先に `./dev.sh test` で作っておく。**テストを開発用の DB につながない**)。
 
 ## 品質チェック(レビュー)
 - 全体の品質チェックを頼まれたら、スキル `quality-review`(`.claude/skills/quality-review/SKILL.md`)の観点で調べ、重大/中/軽に分けて報告する。
