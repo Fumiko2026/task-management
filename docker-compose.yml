@@ -9,7 +9,8 @@ services:
       TZ: Asia/Tokyo
       PGTZ: Asia/Tokyo
     ports:
-      - "5432:5432"
+      # パソコンの中(127.0.0.1)だけに公開する。"5432:5432" だと、同じ Wi-Fi の端末からも DB につながってしまう
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
