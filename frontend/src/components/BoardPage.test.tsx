@@ -438,3 +438,68 @@ describe('BoardPage: 完了マーク(○/✔)', () => {
     expect(screen.queryByText('「部長に報告」を完了にしました')).not.toBeInTheDocument()
   })
 })
+
+describe('BoardPage: チェックリストの○を押すと☑になる', () => {
+  const items = [
+    { id: 11, text: '取引先の情報を集める', done: true },
+    { id: 12, text: '上司に確認する', done: false },
+  ]
+  const boardWithChecklist = (): BoardView => {
+    const board = makeBoard()
+    board.lists[0].cards[0] = makeCard({ id: 1, title: '見積書を作る', checklistDone: 1, checklistTotal: 2, checklist: items })
+    return board
+  }
+
+  it('○を押すと、☑になり、ダイアログの「1/2」も、カード一覧の進み具合も、すぐ変わる', async () => {
+    const saved = makeCard({
+      id: 1,
+      title: '見積書を作る',
+      checklistDone: 2,
+      checklistTotal: 2,
+      checklist: items.map((item) => ({ ...item, done: true })),
+    })
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(boardWithChecklist())).mockResolvedValueOnce(jsonResponse(saved))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: '見積書を作る' }))
+    const dialog = screen.getByRole('dialog', { name: 'カードを編集' })
+    expect(dialog).toHaveTextContent('1/2 完了')
+    await user.click(within(dialog).getByRole('button', { name: '上司に確認する' }))
+
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '上司に確認する' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(dialog).toHaveTextContent('2/2 完了')
+    expect(within(dialog).getByRole('button', { name: '上司に確認する' })).toHaveTextContent('☑')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/checklist-items/12')
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PATCH', body: JSON.stringify({ done: true }) })
+    expect(screen.getByRole('dialog', { name: 'カードを編集' })).toBeInTheDocument() // 閉じない
+  })
+
+  it('保存に失敗したら、理由を出し、○のまま', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(boardWithChecklist()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'サーバーで問題が起きました' }, 500))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: '見積書を作る' }))
+    const dialog = screen.getByRole('dialog', { name: 'カードを編集' })
+    await user.click(within(dialog).getByRole('button', { name: '上司に確認する' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('チェックリストを更新できませんでした。サーバーで問題が起きました')
+    expect(within(dialog).getByRole('button', { name: '上司に確認する' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('項目が無いカードを押しても、チェックリストの欄が出る', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(makeBoard())))
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: '資料をまとめる' }))
+
+    expect(screen.getByRole('region', { name: 'チェックリスト' })).toHaveTextContent('チェックリストは、まだありません')
+  })
+})

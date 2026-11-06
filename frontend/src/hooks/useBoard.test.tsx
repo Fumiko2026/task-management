@@ -277,3 +277,44 @@ describe('useBoard の refresh と setCardCompleted', () => {
     expect(boardOf(hook)).toBe(before)
   })
 })
+
+describe('useBoard の setChecklistItemDone', () => {
+  it('成功したら、返ってきたカードで置き換える(進み具合も変わる)。場所は変わらない', async () => {
+    const saved = makeCard({
+      id: 1,
+      title: '見積書を作る',
+      checklistDone: 4,
+      checklistTotal: 5,
+      checklist: [{ id: 13, text: '上司に確認する', done: true }],
+    })
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(jsonResponse(saved))
+    const hook = await loaded(fetchMock)
+
+    let result: string | null = 'まだ'
+    await act(async () => {
+      result = await hook.result.current.setChecklistItemDone(13, true)
+    })
+
+    expect(result).toBeNull()
+    expect(boardOf(hook).lists[0].cards[0].checklistDone).toBe(4)
+    expect(findCard(boardOf(hook), 1)).toEqual({ listId: 1, index: 0 })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/checklist-items/13')
+  })
+
+  it('失敗したら、理由を返し、ボードは変えない', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'チェックリストの項目が見つかりません(id=13)' }, 404))
+    const hook = await loaded(fetchMock)
+    const before = boardOf(hook)
+
+    let result: string | null = null
+    await act(async () => {
+      result = await hook.result.current.setChecklistItemDone(13, true)
+    })
+
+    expect(result).toBe('チェックリストの項目が見つかりません(id=13)')
+    expect(boardOf(hook)).toBe(before)
+  })
+})

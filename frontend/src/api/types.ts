@@ -56,6 +56,11 @@ export interface BoardView {
   lists: ListView[]
 }
 
+/** PATCH /api/checklist-items/{id} に送る内容。done は、true なら完了にする・false なら未完了に戻す。 */
+export interface ChecklistItemRequest {
+  done: boolean
+}
+
 /** PATCH /api/cards/{id}/complete に送る内容。completed は、true なら完了にする・false なら未完了に戻す。position は、入れる位置(1 から。省略できる)。 */
 export interface CompleteCardRequest {
   completed: boolean
