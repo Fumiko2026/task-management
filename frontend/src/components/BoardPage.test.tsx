@@ -503,3 +503,52 @@ describe('BoardPage: チェックリストの○を押すと☑になる', () =>
     expect(screen.getByRole('region', { name: 'チェックリスト' })).toHaveTextContent('チェックリストは、まだありません')
   })
 })
+
+describe('BoardPage: チェックリストの項目を追加する', () => {
+  it('項目が無いカードに追加すると、ダイアログの一覧に出て、続けて入力できる', async () => {
+    const saved = makeCard({
+      id: 2,
+      title: '資料をまとめる',
+      assignee: null,
+      assigneeMissing: true,
+      checklistDone: 0,
+      checklistTotal: 1,
+      checklist: [{ id: 31, text: 'まず資料を集める', done: false }],
+    })
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(makeBoard())).mockResolvedValueOnce(jsonResponse(saved, 201))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: '資料をまとめる' }))
+    const dialog = screen.getByRole('dialog', { name: 'カードを編集' })
+    expect(dialog).toHaveTextContent('チェックリストは、まだありません')
+    await user.type(within(dialog).getByLabelText('チェックリストの項目'), 'まず資料を集める')
+    await user.click(within(dialog).getByRole('button', { name: '追加' }))
+
+    expect(await within(dialog).findByRole('button', { name: 'まず資料を集める' })).toHaveAttribute('aria-pressed', 'false')
+    expect(dialog).toHaveTextContent('0/1 完了')
+    expect(dialog).not.toHaveTextContent('チェックリストは、まだありません')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/cards/2/checklist-items')
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ text: 'まず資料を集める' }) })
+    expect(within(dialog).getByLabelText('チェックリストの項目')).toHaveValue('')
+  })
+
+  it('追加に失敗したら、理由を出し、入力した文字は残る', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeBoard()))
+      .mockResolvedValueOnce(jsonResponse({ message: 'カードが見つかりません(id=2)' }, 404))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<BoardPage />)
+
+    await user.click(await screen.findByRole('heading', { name: '資料をまとめる' }))
+    const dialog = screen.getByRole('dialog', { name: 'カードを編集' })
+    await user.type(within(dialog).getByLabelText('チェックリストの項目'), 'まず資料を集める')
+    await user.click(within(dialog).getByRole('button', { name: '追加' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('項目を追加できませんでした。カードが見つかりません(id=2)')
+    expect(within(dialog).getByLabelText('チェックリストの項目')).toHaveValue('まず資料を集める')
+  })
+})

@@ -56,6 +56,11 @@ export interface BoardView {
   lists: ListView[]
 }
 
+/** POST /api/cards/{id}/checklist-items に送る内容。text は、手順の文(1〜100 文字)。 */
+export interface AddChecklistItemRequest {
+  text: string
+}
+
 /** PATCH /api/checklist-items/{id} に送る内容。done は、true なら完了にする・false なら未完了に戻す。 */
 export interface ChecklistItemRequest {
   done: boolean

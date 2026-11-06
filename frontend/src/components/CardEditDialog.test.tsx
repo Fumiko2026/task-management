@@ -23,12 +23,14 @@ function setup(
     onSaveDue?: () => Promise<string | null>
     onDelete?: () => Promise<string | null>
     onToggleChecklistItem?: (itemId: number, done: boolean) => Promise<string | null>
+    onAddChecklistItem?: (text: string) => Promise<string | null>
   } = {},
 ) {
   const onClose = vi.fn()
   const onSaveDue = vi.fn(overrides.onSaveDue ?? (() => Promise.resolve(null)))
   const onDelete = vi.fn(overrides.onDelete ?? (() => Promise.resolve(null)))
   const onToggleChecklistItem = vi.fn(overrides.onToggleChecklistItem ?? (() => Promise.resolve(null)))
+  const onAddChecklistItem = vi.fn(overrides.onAddChecklistItem ?? (() => Promise.resolve(null)))
   render(
     <CardEditDialog
       card={card}
@@ -37,9 +39,10 @@ function setup(
       onSaveDue={onSaveDue}
       onDelete={onDelete}
       onToggleChecklistItem={onToggleChecklistItem}
+      onAddChecklistItem={onAddChecklistItem}
     />,
   )
-  return { onClose, onSaveDue, onDelete, onToggleChecklistItem, user: userEvent.setup() }
+  return { onClose, onSaveDue, onDelete, onToggleChecklistItem, onAddChecklistItem, user: userEvent.setup() }
 }
 
 const input = () => screen.getByLabelText('日付と時刻') as HTMLInputElement
@@ -315,7 +318,7 @@ describe('CardEditDialog: チェックリスト', () => {
 
     const section = screen.getByRole('region', { name: 'チェックリスト' })
     expect(section).toHaveTextContent('2/3 完了')
-    const items = within(section).getAllByRole('button')
+    const items = Array.from(section.querySelectorAll('button[aria-pressed]'))
     expect(items.map((item) => item.textContent)).toEqual([
       '☑取引先の情報を集める',
       '☑金額を計算する',
@@ -330,7 +333,8 @@ describe('CardEditDialog: チェックリスト', () => {
 
     const section = screen.getByRole('region', { name: 'チェックリスト' })
     expect(section).toHaveTextContent('チェックリストは、まだありません')
-    expect(within(section).queryAllByRole('button')).toHaveLength(0)
+    expect(section).toHaveTextContent('下の欄から追加できます')
+    expect(section.querySelectorAll('.checklist-toggle')).toHaveLength(0)
   })
 
   it('○を押すと、その項目を完了(true)にする依頼が出る', async () => {
@@ -382,8 +386,101 @@ describe('CardEditDialog: チェックリスト', () => {
   it('項目のボタンは、押しやすい大きさの部品として出る', () => {
     setup(checklistCard)
 
-    for (const button of within(screen.getByRole('region', { name: 'チェックリスト' })).getAllByRole('button')) {
-      expect(button).toHaveClass('checklist-toggle')
-    }
+    const toggles = screen.getByRole('region', { name: 'チェックリスト' }).querySelectorAll('button[aria-pressed]')
+    expect(toggles).toHaveLength(3)
+    for (const button of toggles) expect(button).toHaveClass('checklist-toggle')
+  })
+})
+
+describe('CardEditDialog: チェックリストの項目を追加する', () => {
+  const field = () => screen.getByLabelText('チェックリストの項目') as HTMLInputElement
+  const addButton = () => within(screen.getByRole('form', { name: 'チェックリストの項目を追加' })).getByRole('button', { name: '追加' })
+
+  it('項目が無いカードにも、項目がある カードにも、入力欄と「追加」ボタンがある(入力欄は100文字まで)', () => {
+    const { unmount } = render(
+      <CardEditDialog card={makeCard()} onClose={vi.fn()} onSaveDue={vi.fn()} onDelete={vi.fn()} onToggleChecklistItem={vi.fn()} onAddChecklistItem={vi.fn()} />,
+    )
+    expect(field()).toHaveAttribute('maxlength', '100')
+    expect(addButton()).toBeInTheDocument()
+    unmount()
+
+    setup(checklistCard)
+    expect(field()).toBeInTheDocument()
+    expect(addButton()).toBeInTheDocument()
+  })
+
+  it('空・空白だけのときは、「追加」を押せない', async () => {
+    const { user } = setup(checklistCard)
+    expect(addButton()).toBeDisabled()
+
+    await user.type(field(), '   ')
+    expect(addButton()).toBeDisabled()
+
+    await user.type(field(), 'あ')
+    expect(addButton()).toBeEnabled()
+  })
+
+  it('入れて「追加」を押すと、前後の空白を取り除いて依頼が出る。成功したら、入力欄は空になり、開いたまま、続けて入力できる', async () => {
+    const { user, onAddChecklistItem, onClose } = setup(checklistCard)
+
+    await user.type(field(), '  見積書を送る ')
+    await user.click(addButton())
+
+    expect(onAddChecklistItem).toHaveBeenCalledExactlyOnceWith('見積書を送る')
+    await waitFor(() => expect(field().value).toBe(''))
+    expect(field()).toHaveFocus()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveAttribute('open')
+  })
+
+  it('Enter キーでも追加できる(ダイアログの「決定」は押されない)', async () => {
+    const { user, onAddChecklistItem, onSaveDue } = setup(checklistCard)
+
+    await user.type(field(), '見積書を送る{Enter}')
+
+    expect(onAddChecklistItem).toHaveBeenCalledExactlyOnceWith('見積書を送る')
+    expect(onSaveDue).not.toHaveBeenCalled()
+  })
+
+  it('送っている間は、もう一度押せず(二重に送らない)、入力欄も触れない', async () => {
+    let finish: (message: string | null) => void = () => {}
+    const { user, onAddChecklistItem } = setup(checklistCard, {
+      onAddChecklistItem: () => new Promise((resolve) => (finish = resolve)),
+    })
+
+    await user.type(field(), '見積書を送る')
+    await user.click(addButton())
+    await user.click(addButton())
+    expect(onAddChecklistItem).toHaveBeenCalledTimes(1)
+    expect(addButton()).toBeDisabled()
+    expect(field()).toHaveAttribute('readonly') // 送っている間は、書き換えられない(フォーカスは外れない)
+
+    finish(null)
+    await waitFor(() => expect(addButton()).toBeDisabled()) // 送り終わり、入力欄は空になるので、まだ押せない
+    expect(field().value).toBe('')
+  })
+
+  it('失敗したら、理由を入力欄の近くに出し、入力した文字は残す', async () => {
+    const { user } = setup(checklistCard, {
+      onAddChecklistItem: () => Promise.resolve('項目は100文字までです'),
+    })
+
+    await user.type(field(), '見積書を送る')
+    await user.click(addButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('項目を追加できませんでした。項目は100文字までです')
+    expect(field().value).toBe('見積書を送る')
+    expect(screen.getByRole('dialog')).toHaveAttribute('open')
+  })
+
+  it('入力し直すと、前の失敗の知らせは消える', async () => {
+    const { user } = setup(checklistCard, { onAddChecklistItem: () => Promise.resolve('通信できませんでした') })
+
+    await user.type(field(), 'あ')
+    await user.click(addButton())
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    await user.type(field(), 'い')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

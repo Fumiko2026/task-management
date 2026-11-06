@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 import type { CardView } from '../api/types'
 import { formatDueDateTime } from '../lib/formatDue'
 import { fromInputValue, isPast, quickDue, toInputValue } from '../lib/dueInput'
@@ -8,6 +9,9 @@ type Mode = 'edit' | 'confirmPast' | 'confirmDelete'
 
 /** 出す失敗の知らせ。kind は、何に失敗したか(保存・削除・入力の読み取り)。 */
 type Failure = { kind: 'save' | 'delete' | 'input' | 'checklist'; message: string }
+
+/** チェックリストの項目の文の長さの上限(バックエンドと同じ)。 */
+const CHECKLIST_TEXT_MAX_LENGTH = 100
 
 const QUICK_BUTTONS: { kind: QuickDue; label: string }[] = [
   { kind: 'today', label: '今日' },
@@ -20,6 +24,7 @@ const QUICK_BUTTONS: { kind: QuickDue; label: string }[] = [
  *   - 期限の変更: 「今日」「明日」「来週」(18:00)、日付と時刻の入力、「期限を消す」、「決定」で保存。
  *     過去の日時のときは、「このままにしますか」と確認する。
  *   - チェックリスト: 項目の「○」を押すと「☑」(完了)に、もう一度押すと「○」に戻る。項目が無いカードにも、欄を出す。
+ *     欄の下の入力欄に手順を入れて「追加」(Enter でも可)を押すと、最後に足せる。続けて追加できる。
  *   - 削除: 「このカードを削除」を押すと、確認が出る。「削除する」で、DB から本当に消す(元に戻せない)。
  *   - 保存・削除に失敗したら、ダイアログは開いたまま、理由を出す。入力は残る。
  * 保存・削除・チェックリストの切り替えの通信は、親(onSaveDue / onDelete / onToggleChecklistItem)が行う。成功なら null、失敗なら理由(日本語の文)を返す。
@@ -32,6 +37,7 @@ export function CardEditDialog({
   onSaveDue,
   onDelete,
   onToggleChecklistItem,
+  onAddChecklistItem,
 }: {
   card: CardView
   /** いまの時刻(テストで、固定の時刻に差し替えるため) */
@@ -41,6 +47,8 @@ export function CardEditDialog({
   onDelete: () => Promise<string | null>
   /** チェックリストの項目の完了を切り替える(done = 切り替えたあとの状態)。 */
   onToggleChecklistItem: (itemId: number, done: boolean) => Promise<string | null>
+  /** チェックリストに項目を足す(text は、前後の空白を取り除いた文)。 */
+  onAddChecklistItem: (text: string) => Promise<string | null>
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   // 保存中の目印。state は次の描画まで変わらないので、すばやい二度押しは、ここで防ぐ
@@ -54,6 +62,12 @@ export function CardEditDialog({
   // 切り替えの通信中の項目。同じ項目を、二重に押せないようにする(ほかの項目は押せる)
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const togglingRef = useRef(false)
+  // 項目を足す欄の状態。失敗の知らせは、入力欄のそばに出す(縦に長いダイアログで、見落とさないため)
+  const [newItem, setNewItem] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  const addingRef = useRef(false)
+  const newItemRef = useRef<HTMLInputElement>(null)
 
   // 開く(背景を暗くして、ほかを操作できなくする)
   useEffect(() => {
@@ -93,6 +107,25 @@ export function CardEditDialog({
     togglingRef.current = false
     setTogglingId(null)
     if (message !== null) setError({ kind: 'checklist', message })
+  }
+
+  /** 項目を足す。成功したら、入力欄を空にして、続けて入力できるようにする。失敗したら、理由を出し、入力した文字は残す。 */
+  async function addItem(event: FormEvent) {
+    event.preventDefault() // ダイアログの「決定」(期限の保存)とは、別の操作
+    const text = newItem.trim()
+    if (text === '' || addingRef.current) return
+    addingRef.current = true
+    setAdding(true)
+    setAddError(null)
+    const message = await onAddChecklistItem(text)
+    addingRef.current = false
+    setAdding(false)
+    if (message === null) {
+      setNewItem('')
+      newItemRef.current?.focus()
+    } else {
+      setAddError(message)
+    }
   }
 
   function save() {
@@ -192,7 +225,7 @@ export function CardEditDialog({
                 チェックリスト{card.checklist.length > 0 && `(${card.checklistDone}/${card.checklistTotal} 完了)`}
               </h3>
               {card.checklist.length === 0 ? (
-                <p className="dialog-message">チェックリストは、まだありません</p>
+                <p className="dialog-message">チェックリストは、まだありません。下の欄から追加できます</p>
               ) : (
                 <ul className="dialog-checklist">
                   {card.checklist.map((item) => (
@@ -211,6 +244,32 @@ export function CardEditDialog({
                     </li>
                   ))}
                 </ul>
+              )}
+
+              <form className="checklist-add" aria-label="チェックリストの項目を追加" onSubmit={(event) => void addItem(event)}>
+                <input
+                  ref={newItemRef}
+                  type="text"
+                  className="dialog-input"
+                  aria-label="チェックリストの項目"
+                  placeholder="手順を入力(例: 見積書を送る)"
+                  maxLength={CHECKLIST_TEXT_MAX_LENGTH}
+                  autoComplete="off"
+                  value={newItem}
+                  readOnly={adding}
+                  onChange={(event) => {
+                    setNewItem(event.target.value)
+                    setAddError(null)
+                  }}
+                />
+                <button type="submit" className="button" disabled={newItem.trim() === '' || adding}>
+                  追加
+                </button>
+              </form>
+              {addError && (
+                <p className="form-error" role="alert">
+                  項目を追加できませんでした。{addError}
+                </p>
               )}
             </section>
 

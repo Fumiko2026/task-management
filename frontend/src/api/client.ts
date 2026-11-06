@@ -1,4 +1,5 @@
 import type {
+  AddChecklistItemRequest,
   BoardView,
   CardView,
   ChecklistItemRequest,
@@ -133,6 +134,30 @@ export async function completeCard(cardId: number, completed: boolean, position?
   try {
     response = await fetch(`/api/cards/${cardId}/complete`, {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
+}
+
+/**
+ * POST /api/cards/{id}/checklist-items : チェックリストの項目を、そのカードの最後に足す(未完了)。
+ * 足せたら、更新後のカード(checklistTotal も新しい値)を返す。
+ * 失敗(入力が正しくない 400、カードが無い 404 など)は、API の理由を持つ ApiError にする。
+ */
+export async function addChecklistItem(cardId: number, text: string): Promise<CardView> {
+  const request: AddChecklistItemRequest = { text }
+  let response: Response
+  try {
+    response = await fetch(`/api/cards/${cardId}/checklist-items`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
