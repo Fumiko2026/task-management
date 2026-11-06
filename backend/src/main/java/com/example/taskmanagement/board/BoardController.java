@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -92,6 +93,18 @@ public class BoardController {
 	@PatchMapping(value = "/cards/{id}/complete", produces = JSON_UTF8)
 	public BoardView.CardView completeCard(@PathVariable long id, @RequestBody CompleteCardRequest request) {
 		return boardService.completeCard(id, request);
+	}
+
+	/**
+	 * POST /api/cards/{id}/checklist-items : チェックリストの項目を、そのカードの最後に足す(未完了)。
+	 * 本文は {"text": "手順の文"}(前後の空白は取り除く。1〜100 文字)。
+	 * 足せたら 201 と、更新後のカード(checklistTotal も新しい値)を返す。
+	 * 入力が正しくなければ 400、カードが無ければ 404(どちらも理由つき)。
+	 */
+	@PostMapping(value = "/cards/{id}/checklist-items", produces = JSON_UTF8)
+	public ResponseEntity<BoardView.CardView> addChecklistItem(@PathVariable long id,
+			@RequestBody AddChecklistItemRequest request) {
+		return ResponseEntity.status(HttpStatus.CREATED).body(boardService.addChecklistItem(id, request));
 	}
 
 	/**

@@ -89,6 +89,11 @@ public class InMemoryBoardRepository implements BoardRepository {
 	}
 
 	@Override
+	public void addChecklistItem(long cardId, String text) {
+		throw new UnsupportedOperationException("メモリ上のサンプルは、チェックリストの追加に対応していません");
+	}
+
+	@Override
 	public Optional<Long> findChecklistItemCardId(long itemId) {
 		return allCards()
 				.filter(card -> card.checklist().stream().anyMatch(item -> item.id() == itemId))
