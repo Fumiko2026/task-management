@@ -168,6 +168,24 @@ export function CardEditDialog({
 
         {mode === 'edit' && (
           <>
+            {card.checklist.length > 0 && (
+              <section className="dialog-section" aria-label="チェックリスト">
+                <h3 className="dialog-section-title">
+                  チェックリスト({card.checklistDone}/{card.checklistTotal} 完了)
+                </h3>
+                {/* 色だけで状態を伝えないよう、記号(✔ ○)と、読み上げ用の文字(完了・未完了)をつける */}
+                <ul className="dialog-checklist">
+                  {card.checklist.map((item) => (
+                    <li key={item.id} className={`dialog-checklist-item${item.done ? ' dialog-checklist-item--done' : ''}`}>
+                      <span aria-hidden="true">{item.done ? '✔' : '○'}</span>
+                      <span className="visually-hidden">{item.done ? '完了' : '未完了'}</span>
+                      <span>{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <section className="dialog-section" aria-label="期限">
               <h3 className="dialog-section-title">期限</h3>
               {dueLine ? (
