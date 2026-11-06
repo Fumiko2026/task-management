@@ -322,6 +322,9 @@ curl -i -X POST http://localhost:8080/api/cards \
 ./dev.sh test
 ```
 
+#### 自動テスト(CI)
+PR を作る・更新すると、GitHub Actions(`.github/workflows/ci.yml`)が、バックエンドとフロントエンドのテストを自動で実行します。バックエンドは、CI の中に使い捨ての PostgreSQL を立てて `./mvnw test` を、フロントエンドは `npm run lint`・`npm test`・`npm run build` を実行します。PR の画面の「Checks」が緑(成功)になってから、統合します。
+
 ### 注意
 DB のパスワードなど、秘密の情報は GitHub に上げません。DB をつなぐ段階で、設定ファイルを分けて管理します。
 

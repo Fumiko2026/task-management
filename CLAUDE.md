@@ -83,6 +83,7 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 ./dev.sh front-test      # フロントエンドのテスト
 ```
 フロントエンドの確認は、`frontend/` で `npm test`、`npm run lint`、`npm run build`(型の検査を含む)が、すべて通ること。
+PR を作る・更新すると、GitHub Actions(`.github/workflows/ci.yml`)が、バックエンドとフロントエンドのテストを自動で実行する。**統合の前に、PR のチェックが緑(成功)であることを確かめる**(`gh pr checks 番号`)。
 
 ## 公開の範囲(必ず守る)
 - バックエンド(8080)は、**パソコンの中(127.0.0.1)だけ**で待ち受ける(`application.properties` の `server.address`)。ネットワーク全体(`0.0.0.0`)に向けて開かない。ログインが無い間は、同じ Wi-Fi の端末から、API を直接呼べてしまうため。
