@@ -425,6 +425,26 @@ body {
   margin: 0;
 }
 
+.dialog-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dialog-checklist-item {
+  display: flex;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+/* 完了した項目は、色を薄くする(記号 ✔ でも区別できる) */
+.dialog-checklist-item--done {
+  color: var(--text-sub);
+}
+
 .dialog-due {
   margin: 0;
   align-self: flex-start;

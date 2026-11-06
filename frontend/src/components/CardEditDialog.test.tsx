@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { CardView } from '../api/types'
@@ -44,6 +44,35 @@ describe('CardEditDialog: 開いたとき', () => {
 
     expect(screen.getByRole('dialog')).toHaveTextContent('期限なし')
     expect(input().value).toBe('')
+  })
+
+  it('チェックリストの項目が、順番どおりに、「完了」「未完了」つきで出る', () => {
+    setup(
+      makeCard({
+        checklistDone: 2,
+        checklistTotal: 3,
+        checklist: [
+          { id: 1, text: '取引先の情報を集める', done: true },
+          { id: 2, text: '金額を計算する', done: true },
+          { id: 3, text: '上司に確認する', done: false },
+        ],
+      }),
+    )
+
+    const section = screen.getByRole('region', { name: 'チェックリスト' })
+    expect(section).toHaveTextContent('2/3 完了')
+    const items = within(section).getAllByRole('listitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      '✔完了取引先の情報を集める',
+      '✔完了金額を計算する',
+      '○未完了上司に確認する',
+    ])
+  })
+
+  it('チェックリストが無いカードには、チェックリストの欄を出さない', () => {
+    setup(makeCard({ checklist: [], checklistTotal: 0 }))
+
+    expect(screen.queryByRole('region', { name: 'チェックリスト' })).not.toBeInTheDocument()
   })
 
   it('操作の部品は、押しやすい形で、そろっている', () => {
