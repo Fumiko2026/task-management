@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  addChecklistItem as requestAddChecklistItem,
   ApiError,
   completeCard as requestCompleteCard,
   deleteCard as requestDeleteCard,
@@ -177,5 +178,33 @@ export function useBoard() {
     }
   }, [])
 
-  return { state, reload, addCard, moveCard, updateCard, deleteCard, refresh, setCardCompleted, setChecklistItemDone }
+  /**
+   * チェックリストに項目を足す(そのカードの最後に、未完了で入る)。
+   * 通信が成功してから、返ってきたカードで置き換える(項目の一覧も、カード一覧の「0/1」なども、同時に変わる)。
+   * 成功なら null、失敗なら理由(日本語の文)を返し、ボードは変えない。
+   */
+  const addChecklistItem = useCallback(async (cardId: number, text: string): Promise<string | null> => {
+    try {
+      const saved = await requestAddChecklistItem(cardId, text)
+      setState((current) =>
+        current.status === 'ready' ? { status: 'ready', board: replaceCard(current.board, saved) } : current,
+      )
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : '不明なエラー'
+    }
+  }, [])
+
+  return {
+    state,
+    reload,
+    addCard,
+    moveCard,
+    updateCard,
+    deleteCard,
+    refresh,
+    setCardCompleted,
+    setChecklistItemDone,
+    addChecklistItem,
+  }
 }

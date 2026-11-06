@@ -167,6 +167,16 @@ public class JdbcBoardRepository implements BoardRepository {
 	}
 
 	@Override
+	public void addChecklistItem(long cardId, String text) {
+		jdbc.update("""
+				INSERT INTO checklist_items (card_id, text, is_done, position)
+				SELECT ?, ?, FALSE, COALESCE(MAX(position), 0) + 1
+				  FROM checklist_items
+				 WHERE card_id = ?
+				""", cardId, text, cardId);
+	}
+
+	@Override
 	public Optional<Long> findChecklistItemCardId(long itemId) {
 		return jdbc.queryForList("SELECT card_id FROM checklist_items WHERE id = ?", Long.class, itemId).stream().findFirst();
 	}

@@ -20,6 +20,8 @@ public class BoardService {
 
 	/** カードのタイトルの長さの上限(要件 NM-06。DB の定義と同じ)。 */
 	static final int TITLE_MAX_LENGTH = 100;
+	/** チェックリストの項目の文の長さの上限(DB の text は VARCHAR(100))。 */
+	static final int CHECKLIST_TEXT_MAX_LENGTH = 100;
 
 	/** 更新できる項目の名前(いまは、期限だけ)。 */
 	private static final String FIELD_DUE_AT = "dueAt";
@@ -213,6 +215,31 @@ public class BoardService {
 		repository.findCard(cardId)
 				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
 		repository.updateDueAt(cardId, dueAt);
+		Card updated = repository.findCard(cardId)
+				.orElseThrow(() -> new IllegalStateException("更新したカードが見つかりません(id=" + cardId + ")"));
+		return toCardView(updated, OffsetDateTime.now(clock));
+	}
+
+	/**
+	 * チェックリストの項目を、そのカードの最後に足す(未完了)。更新後のカードを返す。
+	 *   - text が無い・空・空白だけ(全角の空白も)、100 文字を超える → BadRequestException(400)。前後の空白は取り除いて保存する。
+	 *   - カードが無い → NotFoundException(404)
+	 * カードの期限・完了の状態は、変えない(完了済みのカードにも、足せる)。
+	 */
+	@Transactional
+	public BoardView.CardView addChecklistItem(long cardId, AddChecklistItemRequest request) {
+		String text = request.text() == null ? "" : request.text().strip();
+		if (text.isEmpty()) {
+			throw new BadRequestException("項目を入力してください");
+		}
+		// 文字数は、DB(char_length)と同じ数え方にする(絵文字などの2つ分の文字も、1文字と数える)
+		if (text.codePointCount(0, text.length()) > CHECKLIST_TEXT_MAX_LENGTH) {
+			throw new BadRequestException("項目は" + CHECKLIST_TEXT_MAX_LENGTH + "文字までです");
+		}
+		repository.findCard(cardId)
+				.orElseThrow(() -> new NotFoundException("カードが見つかりません(id=" + cardId + ")"));
+
+		repository.addChecklistItem(cardId, text);
 		Card updated = repository.findCard(cardId)
 				.orElseThrow(() -> new IllegalStateException("更新したカードが見つかりません(id=" + cardId + ")"));
 		return toCardView(updated, OffsetDateTime.now(clock));

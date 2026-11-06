@@ -721,3 +721,14 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* チェックリストの項目を足す欄(入力欄 + 「追加」) */
+.checklist-add {
+  display: flex;
+  gap: 8px;
+}
+
+.checklist-add .dialog-input {
+  flex: 1;
+  min-width: 0;
+}

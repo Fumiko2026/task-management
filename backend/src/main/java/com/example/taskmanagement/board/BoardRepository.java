@@ -58,6 +58,12 @@ public interface BoardRepository {
 	 */
 	void updateDueAt(long cardId, OffsetDateTime dueAt);
 
+	/**
+	 * チェックリストの項目を、そのカードの最後に足す(未完了)。並び順は、いまの最後の次の番号(項目が無ければ 1)。
+	 * カードの存在と、文言の検査(空・長さ)は、呼ぶ側(BoardService)で済ませておく。
+	 */
+	void addChecklistItem(long cardId, String text);
+
 	/** チェックリストの項目が、どのカードのものか。項目が無ければ空。 */
 	Optional<Long> findChecklistItemCardId(long itemId);
 
