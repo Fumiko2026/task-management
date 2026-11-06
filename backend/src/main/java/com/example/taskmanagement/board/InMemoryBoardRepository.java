@@ -89,6 +89,19 @@ public class InMemoryBoardRepository implements BoardRepository {
 	}
 
 	@Override
+	public Optional<Long> findChecklistItemCardId(long itemId) {
+		return allCards()
+				.filter(card -> card.checklist().stream().anyMatch(item -> item.id() == itemId))
+				.map(Card::id)
+				.findFirst();
+	}
+
+	@Override
+	public void updateChecklistItemDone(long itemId, boolean done) {
+		throw new UnsupportedOperationException("メモリ上のサンプルは、チェックリストの更新に対応していません");
+	}
+
+	@Override
 	public void deleteCard(long cardId) {
 		throw new UnsupportedOperationException("メモリ上のサンプルは、カードの削除に対応していません");
 	}
