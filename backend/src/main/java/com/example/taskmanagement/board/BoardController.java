@@ -95,6 +95,17 @@ public class BoardController {
 	}
 
 	/**
+	 * PATCH /api/checklist-items/{id} : チェックリストの項目の完了を切り替える。
+	 * 本文は {"done": true}(完了にする)か {"done": false}(未完了に戻す)。
+	 * 200 と、その項目があるカード(更新後)を返す。すでにその状態なら、何も変えずに 200。
+	 * 入力が正しくなければ 400、項目が無ければ 404(どちらも理由つき)。
+	 */
+	@PatchMapping(value = "/checklist-items/{id}", produces = JSON_UTF8)
+	public BoardView.CardView setChecklistItemDone(@PathVariable long id, @RequestBody ChecklistItemRequest request) {
+		return boardService.setChecklistItemDone(id, request);
+	}
+
+	/**
 	 * PATCH /api/cards/{id}/move : カードを動かす。本文は {"listId": 2, "position": 1}。
 	 * position は、移し先で何番目に置くか(1 から。省略すると、最後)。
 	 * 動かせたら 200 と、動かしたあとのカード(完了日時・期限の状態も新しい値)を返す。

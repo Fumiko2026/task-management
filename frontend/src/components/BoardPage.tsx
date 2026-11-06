@@ -30,7 +30,7 @@ interface Notice {
  * 完了マーク(○/✔)を押すと、完了にする・未完了に戻す(「完了」へ入れると完了になり、出すと未完了に戻る)。
  */
 export function BoardPage() {
-  const { state, reload, addCard, moveCard, updateCard, deleteCard, setCardCompleted } = useBoard()
+  const { state, reload, addCard, moveCard, updateCard, deleteCard, setCardCompleted, setChecklistItemDone } = useBoard()
   const [failure, setFailure] = useState<string | null>(null) // 保存できなかったときの知らせ(赤)
   const [editingCardId, setEditingCardId] = useState<number | null>(null) // 編集ダイアログで開いているカード
   const [confirmCard, setConfirmCard] = useState<CardView | null>(null) // 「チェックリストが残っています」の確認の対象
@@ -155,6 +155,7 @@ export function BoardPage() {
               card={editingCard}
               onClose={() => setEditingCardId(null)}
               onSaveDue={(dueAt) => updateCard(editingCard.id, { dueAt })}
+              onToggleChecklistItem={setChecklistItemDone}
               onDelete={async () => {
                 const error = await deleteCard(editingCard.id)
                 if (error === null) setNotice({ text: `「${editingCard.title}」を削除しました`, ms: TOAST_MS })

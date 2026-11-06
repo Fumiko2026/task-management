@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { CardView } from '../api/types'
@@ -17,12 +17,29 @@ const withDue: CardView = makeCard({
   dueLabel: 'もうすぐ',
 })
 
-function setup(card: CardView = withDue, overrides: { onSaveDue?: () => Promise<string | null>; onDelete?: () => Promise<string | null> } = {}) {
+function setup(
+  card: CardView = withDue,
+  overrides: {
+    onSaveDue?: () => Promise<string | null>
+    onDelete?: () => Promise<string | null>
+    onToggleChecklistItem?: (itemId: number, done: boolean) => Promise<string | null>
+  } = {},
+) {
   const onClose = vi.fn()
   const onSaveDue = vi.fn(overrides.onSaveDue ?? (() => Promise.resolve(null)))
   const onDelete = vi.fn(overrides.onDelete ?? (() => Promise.resolve(null)))
-  render(<CardEditDialog card={card} now={() => NOW} onClose={onClose} onSaveDue={onSaveDue} onDelete={onDelete} />)
-  return { onClose, onSaveDue, onDelete, user: userEvent.setup() }
+  const onToggleChecklistItem = vi.fn(overrides.onToggleChecklistItem ?? (() => Promise.resolve(null)))
+  render(
+    <CardEditDialog
+      card={card}
+      now={() => NOW}
+      onClose={onClose}
+      onSaveDue={onSaveDue}
+      onDelete={onDelete}
+      onToggleChecklistItem={onToggleChecklistItem}
+    />,
+  )
+  return { onClose, onSaveDue, onDelete, onToggleChecklistItem, user: userEvent.setup() }
 }
 
 const input = () => screen.getByLabelText('日付と時刻') as HTMLInputElement
@@ -44,35 +61,6 @@ describe('CardEditDialog: 開いたとき', () => {
 
     expect(screen.getByRole('dialog')).toHaveTextContent('期限なし')
     expect(input().value).toBe('')
-  })
-
-  it('チェックリストの項目が、順番どおりに、「完了」「未完了」つきで出る', () => {
-    setup(
-      makeCard({
-        checklistDone: 2,
-        checklistTotal: 3,
-        checklist: [
-          { id: 1, text: '取引先の情報を集める', done: true },
-          { id: 2, text: '金額を計算する', done: true },
-          { id: 3, text: '上司に確認する', done: false },
-        ],
-      }),
-    )
-
-    const section = screen.getByRole('region', { name: 'チェックリスト' })
-    expect(section).toHaveTextContent('2/3 完了')
-    const items = within(section).getAllByRole('listitem')
-    expect(items.map((item) => item.textContent)).toEqual([
-      '✔完了取引先の情報を集める',
-      '✔完了金額を計算する',
-      '○未完了上司に確認する',
-    ])
-  })
-
-  it('チェックリストが無いカードには、チェックリストの欄を出さない', () => {
-    setup(makeCard({ checklist: [], checklistTotal: 0 }))
-
-    expect(screen.queryByRole('region', { name: 'チェックリスト' })).not.toBeInTheDocument()
   })
 
   it('操作の部品は、押しやすい形で、そろっている', () => {
@@ -306,5 +294,96 @@ describe('CardEditDialog: 削除', () => {
     expect(onDelete).toHaveBeenCalledTimes(1)
     finish(null)
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+})
+
+const checklistCard: CardView = makeCard({
+  id: 7,
+  title: '見積書を作る',
+  checklistDone: 2,
+  checklistTotal: 3,
+  checklist: [
+    { id: 11, text: '取引先の情報を集める', done: true },
+    { id: 12, text: '金額を計算する', done: true },
+    { id: 13, text: '上司に確認する', done: false },
+  ],
+})
+
+describe('CardEditDialog: チェックリスト', () => {
+  it('項目が、順番どおりに、完了は「☑」、未完了は「○」で出て、進み具合も出る', () => {
+    setup(checklistCard)
+
+    const section = screen.getByRole('region', { name: 'チェックリスト' })
+    expect(section).toHaveTextContent('2/3 完了')
+    const items = within(section).getAllByRole('button')
+    expect(items.map((item) => item.textContent)).toEqual([
+      '☑取引先の情報を集める',
+      '☑金額を計算する',
+      '○上司に確認する',
+    ])
+    // 状態は、記号だけでなく、読み上げにも伝わる(押された状態 = 完了)
+    expect(items.map((item) => item.getAttribute('aria-pressed'))).toEqual(['true', 'true', 'false'])
+  })
+
+  it('項目が無いカードでも、チェックリストの欄が出て、「まだありません」と出る', () => {
+    setup(makeCard({ checklist: [], checklistTotal: 0 }))
+
+    const section = screen.getByRole('region', { name: 'チェックリスト' })
+    expect(section).toHaveTextContent('チェックリストは、まだありません')
+    expect(within(section).queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('○を押すと、その項目を完了(true)にする依頼が出る', async () => {
+    const { user, onToggleChecklistItem } = setup(checklistCard)
+
+    await user.click(screen.getByRole('button', { name: '上司に確認する' }))
+
+    expect(onToggleChecklistItem).toHaveBeenCalledExactlyOnceWith(13, true)
+  })
+
+  it('☑を押すと、その項目を未完了(false)に戻す依頼が出る', async () => {
+    const { user, onToggleChecklistItem } = setup(checklistCard)
+
+    await user.click(screen.getByRole('button', { name: '金額を計算する' }))
+
+    expect(onToggleChecklistItem).toHaveBeenCalledExactlyOnceWith(12, false)
+  })
+
+  it('押している間は、その項目をもう一度押せない(二重に送らない)。終わったら、ダイアログは開いたまま', async () => {
+    let finish: (message: string | null) => void = () => {}
+    const { user, onToggleChecklistItem, onClose } = setup(checklistCard, {
+      onToggleChecklistItem: () => new Promise((resolve) => (finish = resolve)),
+    })
+
+    const item = screen.getByRole('button', { name: '上司に確認する' })
+    await user.click(item)
+    await user.click(item)
+    expect(onToggleChecklistItem).toHaveBeenCalledTimes(1)
+    expect(item).toBeDisabled()
+
+    finish(null)
+    await waitFor(() => expect(item).toBeEnabled())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveAttribute('open')
+  })
+
+  it('失敗したら、理由を出し、ダイアログは開いたまま(項目の表示は変えない)', async () => {
+    const { user } = setup(checklistCard, {
+      onToggleChecklistItem: () => Promise.resolve('通信できませんでした'),
+    })
+
+    await user.click(screen.getByRole('button', { name: '上司に確認する' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('チェックリストを更新できませんでした。通信できませんでした')
+    expect(screen.getByRole('button', { name: '上司に確認する' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('dialog')).toHaveAttribute('open')
+  })
+
+  it('項目のボタンは、押しやすい大きさの部品として出る', () => {
+    setup(checklistCard)
+
+    for (const button of within(screen.getByRole('region', { name: 'チェックリスト' })).getAllByRole('button')) {
+      expect(button).toHaveClass('checklist-toggle')
+    }
   })
 })

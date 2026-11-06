@@ -7,7 +7,7 @@ import type { QuickDue } from '../lib/dueInput'
 type Mode = 'edit' | 'confirmPast' | 'confirmDelete'
 
 /** 出す失敗の知らせ。kind は、何に失敗したか(保存・削除・入力の読み取り)。 */
-type Failure = { kind: 'save' | 'delete' | 'input'; message: string }
+type Failure = { kind: 'save' | 'delete' | 'input' | 'checklist'; message: string }
 
 const QUICK_BUTTONS: { kind: QuickDue; label: string }[] = [
   { kind: 'today', label: '今日' },
@@ -19,9 +19,10 @@ const QUICK_BUTTONS: { kind: QuickDue; label: string }[] = [
  * カードの編集ダイアログ(画面仕様 カード詳細 §3-⑤)。ボードの上に重ねて出す。スマホでは、下から出る形。
  *   - 期限の変更: 「今日」「明日」「来週」(18:00)、日付と時刻の入力、「期限を消す」、「決定」で保存。
  *     過去の日時のときは、「このままにしますか」と確認する。
+ *   - チェックリスト: 項目の「○」を押すと「☑」(完了)に、もう一度押すと「○」に戻る。項目が無いカードにも、欄を出す。
  *   - 削除: 「このカードを削除」を押すと、確認が出る。「削除する」で、DB から本当に消す(元に戻せない)。
  *   - 保存・削除に失敗したら、ダイアログは開いたまま、理由を出す。入力は残る。
- * 保存・削除の通信は、親(onSaveDue / onDelete)が行う。成功なら null、失敗なら理由(日本語の文)を返す。
+ * 保存・削除・チェックリストの切り替えの通信は、親(onSaveDue / onDelete / onToggleChecklistItem)が行う。成功なら null、失敗なら理由(日本語の文)を返す。
  * 標準の <dialog> 要素を使う: Esc で閉じる、閉じたら元の場所にフォーカスが戻る、背景は操作できない、が標準でつく。
  */
 export function CardEditDialog({
@@ -30,6 +31,7 @@ export function CardEditDialog({
   onClose,
   onSaveDue,
   onDelete,
+  onToggleChecklistItem,
 }: {
   card: CardView
   /** いまの時刻(テストで、固定の時刻に差し替えるため) */
@@ -37,6 +39,8 @@ export function CardEditDialog({
   onClose: () => void
   onSaveDue: (dueAt: string | null) => Promise<string | null>
   onDelete: () => Promise<string | null>
+  /** チェックリストの項目の完了を切り替える(done = 切り替えたあとの状態)。 */
+  onToggleChecklistItem: (itemId: number, done: boolean) => Promise<string | null>
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   // 保存中の目印。state は次の描画まで変わらないので、すばやい二度押しは、ここで防ぐ
@@ -47,6 +51,9 @@ export function CardEditDialog({
   const [mode, setMode] = useState<Mode>('edit')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<Failure | null>(null)
+  // 切り替えの通信中の項目。同じ項目を、二重に押せないようにする(ほかの項目は押せる)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const togglingRef = useRef(false)
 
   // 開く(背景を暗くして、ほかを操作できなくする)
   useEffect(() => {
@@ -74,6 +81,18 @@ export function CardEditDialog({
       setError({ kind, message })
       if (kind === 'save') setMode('edit')
     }
+  }
+
+  /** 項目の完了を切り替える。成功すると、親がカードを置き換えるので、表示(☑ ○、3/5)が変わる。失敗したら、理由を出す。 */
+  async function toggleItem(itemId: number, done: boolean) {
+    if (togglingRef.current) return
+    togglingRef.current = true
+    setTogglingId(itemId)
+    setError(null)
+    const message = await onToggleChecklistItem(itemId, done)
+    togglingRef.current = false
+    setTogglingId(null)
+    if (message !== null) setError({ kind: 'checklist', message })
   }
 
   function save() {
@@ -168,23 +187,32 @@ export function CardEditDialog({
 
         {mode === 'edit' && (
           <>
-            {card.checklist.length > 0 && (
-              <section className="dialog-section" aria-label="チェックリスト">
-                <h3 className="dialog-section-title">
-                  チェックリスト({card.checklistDone}/{card.checklistTotal} 完了)
-                </h3>
-                {/* 色だけで状態を伝えないよう、記号(✔ ○)と、読み上げ用の文字(完了・未完了)をつける */}
+            <section className="dialog-section" aria-label="チェックリスト">
+              <h3 className="dialog-section-title">
+                チェックリスト{card.checklist.length > 0 && `(${card.checklistDone}/${card.checklistTotal} 完了)`}
+              </h3>
+              {card.checklist.length === 0 ? (
+                <p className="dialog-message">チェックリストは、まだありません</p>
+              ) : (
                 <ul className="dialog-checklist">
                   {card.checklist.map((item) => (
-                    <li key={item.id} className={`dialog-checklist-item${item.done ? ' dialog-checklist-item--done' : ''}`}>
-                      <span aria-hidden="true">{item.done ? '✔' : '○'}</span>
-                      <span className="visually-hidden">{item.done ? '完了' : '未完了'}</span>
-                      <span>{item.text}</span>
+                    <li key={item.id}>
+                      {/* 状態は、記号(☑ ○)と、押された状態(aria-pressed)で伝える。色だけに頼らない */}
+                      <button
+                        type="button"
+                        className={`checklist-toggle${item.done ? ' checklist-toggle--done' : ''}`}
+                        aria-pressed={item.done}
+                        onClick={() => void toggleItem(item.id, !item.done)}
+                        disabled={togglingId === item.id}
+                      >
+                        <span aria-hidden="true">{item.done ? '☑' : '○'}</span>
+                        <span>{item.text}</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
-              </section>
-            )}
+              )}
+            </section>
 
             <section className="dialog-section" aria-label="期限">
               <h3 className="dialog-section-title">期限</h3>
@@ -241,7 +269,11 @@ export function CardEditDialog({
 
             {error && error.kind !== 'delete' && (
               <p className="form-error" role="alert">
-                {error.kind === 'save' ? `保存できませんでした。${error.message}` : error.message}
+                {error.kind === 'save'
+                  ? `保存できませんでした。${error.message}`
+                  : error.kind === 'checklist'
+                    ? `チェックリストを更新できませんでした。${error.message}`
+                    : error.message}
               </p>
             )}
 

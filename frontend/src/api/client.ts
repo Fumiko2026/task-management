@@ -1,6 +1,7 @@
 import type {
   BoardView,
   CardView,
+  ChecklistItemRequest,
   CompleteCardRequest,
   CreateCardRequest,
   MoveCardRequest,
@@ -131,6 +132,29 @@ export async function completeCard(cardId: number, completed: boolean, position?
   let response: Response
   try {
     response = await fetch(`/api/cards/${cardId}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new ApiError(0, '通信できませんでした')
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readMessage(response))
+  }
+  return (await response.json()) as CardView
+}
+
+/**
+ * PATCH /api/checklist-items/{id} : チェックリストの項目を、完了にする(done = true)、または未完了に戻す(false)。
+ * その項目があるカード(更新後)を返す。失敗(項目が無い 404 など)は、API の理由を持つ ApiError にする。
+ */
+export async function setChecklistItemDone(itemId: number, done: boolean): Promise<CardView> {
+  const request: ChecklistItemRequest = { done }
+  let response: Response
+  try {
+    response = await fetch(`/api/checklist-items/${itemId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),

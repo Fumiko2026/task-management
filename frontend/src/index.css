@@ -434,15 +434,47 @@ body {
   list-style: none;
 }
 
-.dialog-checklist-item {
+.dialog-checklist li {
+  margin: 0;
+}
+
+/* 項目全体が、押せるボタン。指で押しやすいよう、高さ 44px 以上 */
+.checklist-toggle {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
   overflow-wrap: anywhere;
 }
 
-/* 完了した項目は、色を薄くする(記号 ✔ でも区別できる) */
-.dialog-checklist-item--done {
+.checklist-toggle > span:first-child {
+  flex: none;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* 完了した項目は、色を薄くする(記号 ☑ でも区別できる) */
+.checklist-toggle--done {
   color: var(--text-sub);
+}
+
+.checklist-toggle:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.checklist-toggle:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .dialog-due {

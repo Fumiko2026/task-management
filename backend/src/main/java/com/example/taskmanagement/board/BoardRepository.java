@@ -58,6 +58,15 @@ public interface BoardRepository {
 	 */
 	void updateDueAt(long cardId, OffsetDateTime dueAt);
 
+	/** チェックリストの項目が、どのカードのものか。項目が無ければ空。 */
+	Optional<Long> findChecklistItemCardId(long itemId);
+
+	/**
+	 * チェックリストの項目の完了を、done にする(true なら完了、false なら未完了)。
+	 * 項目の文言・並び順・カードの期限などは、変えない。項目の存在の確認は、呼ぶ側(BoardService)で済ませておく。
+	 */
+	void updateChecklistItemDone(long itemId, boolean done);
+
 	/**
 	 * カードを、DB から本当に消す(物理削除)。元に戻せない。
 	 * そのカードのチェックリストも、DB の仕組み(ON DELETE CASCADE)で、一緒に消える。

@@ -219,6 +219,26 @@ public class BoardService {
 	}
 
 	/**
+	 * チェックリストの項目の完了を切り替える(done = true なら完了、false なら未完了)。更新後のカードを返す。
+	 *   - すでに、その状態なら、何も変えずに、いまのカードを返す(二重のタップに強い)。
+	 *   - 項目の文言・並び順・カードの期限と完了の状態は、変えない(全部の項目を終えても、カードは自動では完了にしない)。
+	 *   - done が無い → BadRequestException(400)。項目が無い → NotFoundException(404)。
+	 */
+	@Transactional
+	public BoardView.CardView setChecklistItemDone(long itemId, ChecklistItemRequest request) {
+		if (request.done() == null) {
+			throw new BadRequestException("done を、true か false で指定してください");
+		}
+		long cardId = repository.findChecklistItemCardId(itemId)
+				.orElseThrow(() -> new NotFoundException("チェックリストの項目が見つかりません(id=" + itemId + ")"));
+
+		repository.updateChecklistItemDone(itemId, request.done());
+		Card updated = repository.findCard(cardId)
+				.orElseThrow(() -> new IllegalStateException("更新したカードが見つかりません(id=" + cardId + ")"));
+		return toCardView(updated, OffsetDateTime.now(clock));
+	}
+
+	/**
 	 * カードを削除する(物理削除。DB から本当に消える。元に戻せない)。
 	 * そのカードのチェックリストも、一緒に消える。同じリストに残ったカードの並び順は、1,2,3… に振り直す。
 	 * カードが無ければ NotFoundException(404)。

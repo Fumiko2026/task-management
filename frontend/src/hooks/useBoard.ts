@@ -5,6 +5,7 @@ import {
   deleteCard as requestDeleteCard,
   fetchBoard,
   moveCard as requestMoveCard,
+  setChecklistItemDone as requestSetChecklistItemDone,
   updateCard as requestUpdateCard,
 } from '../api/client'
 import type { BoardView, CardView, UpdateCardRequest } from '../api/types'
@@ -159,5 +160,22 @@ export function useBoard() {
     [refresh],
   )
 
-  return { state, reload, addCard, moveCard, updateCard, deleteCard, refresh, setCardCompleted }
+  /**
+   * チェックリストの項目を、完了にする(done = true)、または未完了に戻す(false)。
+   * 通信が成功してから、返ってきたカードで置き換える(カード一覧の「3/5」も、同時に変わる)。
+   * 先には変えないので、失敗したときに戻す必要が無い。成功なら null、失敗なら理由(日本語の文)を返し、ボードは変えない。
+   */
+  const setChecklistItemDone = useCallback(async (itemId: number, done: boolean): Promise<string | null> => {
+    try {
+      const saved = await requestSetChecklistItemDone(itemId, done)
+      setState((current) =>
+        current.status === 'ready' ? { status: 'ready', board: replaceCard(current.board, saved) } : current,
+      )
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : '不明なエラー'
+    }
+  }, [])
+
+  return { state, reload, addCard, moveCard, updateCard, deleteCard, refresh, setCardCompleted, setChecklistItemDone }
 }

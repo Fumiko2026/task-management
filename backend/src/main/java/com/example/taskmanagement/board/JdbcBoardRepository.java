@@ -167,6 +167,16 @@ public class JdbcBoardRepository implements BoardRepository {
 	}
 
 	@Override
+	public Optional<Long> findChecklistItemCardId(long itemId) {
+		return jdbc.queryForList("SELECT card_id FROM checklist_items WHERE id = ?", Long.class, itemId).stream().findFirst();
+	}
+
+	@Override
+	public void updateChecklistItemDone(long itemId, boolean done) {
+		jdbc.update("UPDATE checklist_items SET is_done = ? WHERE id = ?", done, itemId);
+	}
+
+	@Override
 	public void deleteCard(long cardId) {
 		List<Long> lists = jdbc.queryForList("SELECT list_id FROM cards WHERE id = ?", Long.class, cardId);
 		if (lists.isEmpty()) {

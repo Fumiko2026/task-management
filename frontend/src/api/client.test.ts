@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse, makeCard } from '../test/fixtures'
-import { ApiError, completeCard, createCard, deleteCard, moveCard, updateCard } from './client'
+import { ApiError, completeCard, createCard, deleteCard, moveCard, setChecklistItemDone, updateCard } from './client'
 
 describe('createCard', () => {
   it('/api/cards に、JSON を POST して、作ったカードを返す', async () => {
@@ -170,5 +170,36 @@ describe('completeCard', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await expect(completeCard(7, true)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
+  })
+})
+
+describe('setChecklistItemDone', () => {
+  it('/api/checklist-items/{id} に、PATCH で、done を送り、更新後のカードを返す', async () => {
+    const card = makeCard({ id: 7, checklistDone: 1, checklistTotal: 2 })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(card))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await setChecklistItemDone(13, true)
+
+    expect(result).toEqual(card)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/checklist-items/13',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ done: true }) }),
+    )
+  })
+
+  it('404 のときは、API の理由を持つ ApiError にする', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'チェックリストの項目が見つかりません(id=13)' }, 404)))
+
+    await expect(setChecklistItemDone(13, true)).rejects.toMatchObject({
+      status: 404,
+      message: 'チェックリストの項目が見つかりません(id=13)',
+    })
+  })
+
+  it('通信できないときは、「通信できませんでした」', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(setChecklistItemDone(13, false)).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
   })
 })
