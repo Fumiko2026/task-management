@@ -98,6 +98,7 @@ erDiagram
         int position
         datetime due_at "null可"
         datetime completed_at "null可"
+        bigint completed_from_list_id FK "null可・完了前のリスト"
     }
     checklist_items {
         bigint id PK

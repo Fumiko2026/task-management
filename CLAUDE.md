@@ -99,6 +99,10 @@ docker compose up -d     # DB を起動(プロジェクト直下)
 - 手順の詳細は、スキル `free-port`(`.claude/skills/free-port/SKILL.md`)を使う。
 `dev.sh` を使わないときは、`cd backend` して `export DB_PASSWORD=...`(`.env` と同じ値)のうえ `./mvnw spring-boot:run` / `./mvnw test`。
 
+## 品質チェック(レビュー)
+- 全体の品質チェックを頼まれたら、スキル `quality-review`(`.claude/skills/quality-review/SKILL.md`)の観点で調べ、重大/中/軽に分けて報告する。
+- 設計書と実装が食い違っていたら、**実装を正として**、設計書を直す(コードを直すのは、不具合のときだけ)。
+
 ## コードの決まり
 - 構成は Controller / Service / Repository に分ける。
 - 日時は日本時間(Asia/Tokyo)。DB の日時は TIMESTAMPTZ。
