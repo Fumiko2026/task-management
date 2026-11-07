@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse, makeCard } from '../test/fixtures'
-import { addChecklistItem, ApiError, completeCard, createCard, deleteCard, moveCard, setChecklistItemDone, updateCard } from './client'
+import {
+  addChecklistItem,
+  ApiError,
+  completeCard,
+  createCard,
+  deleteCard,
+  fetchBoard,
+  moveCard,
+  REQUEST_TIMEOUT_MS,
+  setChecklistItemDone,
+  updateCard,
+} from './client'
 
 describe('createCard', () => {
   it('/api/cards に、JSON を POST して、作ったカードを返す', async () => {
@@ -229,5 +240,34 @@ describe('addChecklistItem', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await expect(addChecklistItem(7, 'あ')).rejects.toMatchObject({ status: 0, message: '通信できませんでした' })
+  })
+})
+
+describe('通信の時間切れ', () => {
+  it('どの通信にも、時間切れの signal がつく', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCard({ id: 1 })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await moveCard(1, 2, 1)
+    await deleteCard(1).catch(() => undefined)
+
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1] as RequestInit).signal).toBeInstanceOf(AbortSignal)
+    }
+    expect(REQUEST_TIMEOUT_MS).toBe(15_000)
+  })
+
+  it('時間切れのときは、「通信に時間がかかりすぎました」(通信できないときとは別の文)', async () => {
+    const timeout = new DOMException('The operation timed out.', 'TimeoutError')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeout))
+
+    await expect(fetchBoard()).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining('通信に時間がかかりすぎました'),
+    })
+    await expect(createCard(3, '請求書')).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining('時間がかかりすぎました'),
+    })
   })
 })
