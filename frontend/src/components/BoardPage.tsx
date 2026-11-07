@@ -6,6 +6,7 @@ import type { CardPlace } from '../lib/boardMove'
 import { BoardColumns } from './BoardColumns'
 import { CardEditDialog } from './CardEditDialog'
 import { BoardHeader } from './BoardHeader'
+import { ChalkTray } from './ChalkTray'
 import { BoardSkeleton } from './BoardSkeleton'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ErrorMessage } from './ErrorMessage'
@@ -148,6 +149,7 @@ export function BoardPage() {
             onOpenCard={setEditingCardId}
             onToggleComplete={onToggleComplete}
           />
+          <ChalkTray />
           {/* ダイアログには、ボードの最新のカードを渡す。カードが消えたら(削除したら)、ダイアログも消える */}
           {editingCard && (
             <CardEditDialog
