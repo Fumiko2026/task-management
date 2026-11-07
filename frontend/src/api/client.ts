@@ -20,14 +20,30 @@ export class ApiError extends Error {
   }
 }
 
+/** 通信の時間切れ(ミリ秒)。電波が悪いときに、読み込み中・保存中のまま、止まらないようにする。 */
+export const REQUEST_TIMEOUT_MS = 15_000
+
+/** fetch に、時間切れをつけたもの。時間が過ぎると、TimeoutError で失敗する。 */
+function fetchWithTimeout(input: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+}
+
+/** 通信そのものが失敗したときの、画面に出す理由。時間切れのときは、別の文にする。 */
+function networkError(error: unknown): ApiError {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return new ApiError(0, '通信に時間がかかりすぎました。電波のよいところで、もう一度試してください')
+  }
+  return new ApiError(0, '通信できませんでした')
+}
+
 /** GET /api/board : ボード全体(リストと、その中のカード)を取得する。 */
 export async function fetchBoard(): Promise<BoardView> {
   let response: Response
   try {
-    response = await fetch('/api/board', { headers: { Accept: 'application/json' } })
-  } catch {
+    response = await fetchWithTimeout('/api/board', { headers: { Accept: 'application/json' } })
+  } catch (error) {
     // サーバーが止まっている、ネットワークがつながらない、など
-    throw new ApiError(0, '通信できませんでした')
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -44,13 +60,13 @@ export async function createCard(listId: number, title: string): Promise<CardVie
   const request: CreateCardRequest = { listId, title }
   let response: Response
   try {
-    response = await fetch('/api/cards', {
+    response = await fetchWithTimeout('/api/cards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -68,13 +84,13 @@ export async function moveCard(cardId: number, listId: number, position: number)
   const request: MoveCardRequest = { listId, position }
   let response: Response
   try {
-    response = await fetch(`/api/cards/${cardId}/move`, {
+    response = await fetchWithTimeout(`/api/cards/${cardId}/move`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -91,13 +107,13 @@ export async function moveCard(cardId: number, listId: number, position: number)
 export async function updateCard(cardId: number, changes: UpdateCardRequest): Promise<CardView> {
   let response: Response
   try {
-    response = await fetch(`/api/cards/${cardId}`, {
+    response = await fetchWithTimeout(`/api/cards/${cardId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(changes),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -113,9 +129,9 @@ export async function updateCard(cardId: number, changes: UpdateCardRequest): Pr
 export async function deleteCard(cardId: number): Promise<void> {
   let response: Response
   try {
-    response = await fetch(`/api/cards/${cardId}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+    response = await fetchWithTimeout(`/api/cards/${cardId}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -132,13 +148,13 @@ export async function completeCard(cardId: number, completed: boolean, position?
   const request: CompleteCardRequest = position === undefined ? { completed } : { completed, position }
   let response: Response
   try {
-    response = await fetch(`/api/cards/${cardId}/complete`, {
+    response = await fetchWithTimeout(`/api/cards/${cardId}/complete`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -156,13 +172,13 @@ export async function addChecklistItem(cardId: number, text: string): Promise<Ca
   const request: AddChecklistItemRequest = { text }
   let response: Response
   try {
-    response = await fetch(`/api/cards/${cardId}/checklist-items`, {
+    response = await fetchWithTimeout(`/api/cards/${cardId}/checklist-items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
@@ -179,13 +195,13 @@ export async function setChecklistItemDone(itemId: number, done: boolean): Promi
   const request: ChecklistItemRequest = { done }
   let response: Response
   try {
-    response = await fetch(`/api/checklist-items/${itemId}`, {
+    response = await fetchWithTimeout(`/api/checklist-items/${itemId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(request),
     })
-  } catch {
-    throw new ApiError(0, '通信できませんでした')
+  } catch (error) {
+    throw networkError(error)
   }
 
   if (!response.ok) {
