@@ -30,8 +30,9 @@
 
   --accent: #1d4ed8;
 
-  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo,
-    sans-serif;
+  /* やわらかい丸ゴシック(Mac・iPhone に入っている「ヒラギノ丸ゴ」)。無い端末では、ふつうのゴシックになる */
+  font-family: 'Hiragino Maru Gothic ProN', 'ヒラギノ丸ゴ ProN', -apple-system, BlinkMacSystemFont, 'Hiragino Sans',
+    'Yu Gothic', Meiryo, sans-serif;
   font-size: 16px;
   line-height: 1.5;
   color: var(--text);
@@ -204,7 +205,7 @@ body {
 
 .card-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.1875rem; /* 19px。カードの 1 行目は、読みやすく大きめに */
   font-weight: 600;
   /* タイトルは最大3行。超えたら「…」 */
   display: -webkit-box;
