@@ -110,7 +110,7 @@ export function BoardPage() {
     case 'loading':
       return (
         <div className="page">
-          <BoardHeader title="タスク管理" />
+          <BoardHeader />
           <BoardSkeleton />
         </div>
       )
@@ -118,7 +118,7 @@ export function BoardPage() {
     case 'error':
       return (
         <div className="page">
-          <BoardHeader title="タスク管理" />
+          <BoardHeader />
           <ErrorMessage detail={state.message} onRetry={reload} />
         </div>
       )
@@ -126,7 +126,7 @@ export function BoardPage() {
     case 'empty':
       return (
         <div className="page">
-          <BoardHeader title="タスク管理" />
+          <BoardHeader />
           <div className="notice" role="status">
             <p className="notice-title">{state.message}</p>
           </div>
