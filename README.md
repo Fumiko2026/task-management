@@ -181,8 +181,7 @@ DB のポート(5432)は、パソコンの中(127.0.0.1)だけに公開してい
 ### 動作の確認
 | 確認 | コマンド | 結果 |
 |---|---|---|
-| 起動の確認 | `curl http://localhost:8080/api/hello` | `ok` |
-| DB への接続の確認 | `curl http://localhost:8080/api/db-check` | `ok` |
+| 起動と DB 接続の確認 | `curl http://localhost:8080/actuator/health` | `{"status":"UP"}`(DB がつながっていないと `DOWN`) |
 | ボードの取得 | `curl http://localhost:8080/api/board` | ボードのデータ(JSON)。ボードが無いときは 404 |
 | カード 1 枚の取得 | `curl http://localhost:8080/api/cards/1` | カードの詳細(チェックリストつき)。無いときは 404 |
 | 自分のタスク | `curl http://localhost:8080/api/tasks` | 未完了のカードを、期限が近い順に(期限なしは最後) |

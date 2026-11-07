@@ -69,7 +69,7 @@ case "${1:-}" in
 		echo "   終わったら control + c で止めて、ふだんの  ./dev.sh front  に戻してください。"
 		echo "=========================================================="
 		# バックエンドが動いているか(動いていなくても、起動は続ける。画面にだけ、読み込めませんと出る)
-		if ! curl -s -m 2 http://127.0.0.1:8080/api/hello 2>/dev/null | grep -q '^ok$'; then
+		if ! curl -s -m 2 http://127.0.0.1:8080/actuator/health 2>/dev/null | grep -q '"status":"UP"'; then
 			echo "※ バックエンドが動いていません。別のターミナルで  ./dev.sh seed  を実行してください。"
 		fi
 		exec npm run dev -- --host
