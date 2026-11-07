@@ -19,7 +19,7 @@ argument-hint: "[backend | frontend | docs | all]"
 - [ ] `server.address=127.0.0.1` のままか。`vite.config.ts` に `host` を常時書いていないか
 - [ ] `.env` が Git の履歴に無いか(`git log --all -- .env`)。パスワードがコードや文書に無いか
 - [ ] ログインが無い間の注意(NM-07)。他人のデータを見せない絞り込み(user_id)の `TODO` が残っていないか
-- [ ] 開発用の入口(`/api/hello`、`/api/db-check`)が、公開用に残っていないか
+- [ ] 開発用の入口(自作の確認用 API など)が、公開用に残っていないか。確認は Actuator の `/actuator/health` だけを公開しているか(`management.endpoints.web.exposure.include=health`)
 - [ ] 依存の脆弱性: `cd frontend && npm audit`
 
 ## B. Spring Boot の標準

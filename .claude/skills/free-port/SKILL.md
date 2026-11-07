@@ -29,7 +29,7 @@ argument-hint: "[8080 | 5173]"
    - 止める前に、何を止めるかが表示される。通常の停止(SIGTERM)を試し、10 秒たっても止まらなければ強制終了(SIGKILL)する。
 3. **標準のポートで、もう一度起動する。** 上の表のコマンドを使う。
 4. **起動を確かめる。**
-   - バックエンド: `curl http://localhost:8080/api/hello` が `ok`
+   - バックエンド: `curl http://localhost:8080/actuator/health` が `{"status":"UP"}`
    - フロントエンド: `curl -s http://localhost:5173 | grep タスク管理` が出る。`curl http://localhost:5173/api/board` が、バックエンドからの応答を返す
 5. **利用者に報告する。** 「ポート ○○ を、△△(プロセス名)が使っていたので止めました」と、**何を止めたか**を、やさしい日本語で伝える。
 
