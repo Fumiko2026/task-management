@@ -3,7 +3,7 @@
 このファイルは、Claude Code がこのプロジェクトで作業するときに、毎回読むルールです。
 
 ## プロジェクトの概要
-- Trello 風のタスク管理アプリ(WEB スクールの課題)。個人利用。
+- Trello 風のタスク管理アプリ(WEB スクールの課題)。個人利用。アプリの名前は **Kokuban**(黒板)。画面は、緑の黒板に白いカードを貼る見た目にする。カードは白系のまま(読みやすさのため)、文字と背景のコントラスト比は 4.5:1 以上を守る。
 - バックエンド: Spring Boot 4.1.2 / Java 21 / Maven(`backend/`)。DB: PostgreSQL 17(Docker)。
 - フロントエンド: React 19 / TypeScript / Vite(`frontend/`)。テストは Vitest + Testing Library。開発中は、Vite が `/api` をバックエンド(8080)へ中継する(CORS の設定は不要)。
 - 設計書は `docs/` と `requirements.md`。最小版の範囲は `docs/mvp-scope.md`。

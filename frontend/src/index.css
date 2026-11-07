@@ -6,8 +6,12 @@
 :root {
   color-scheme: light;
 
-  --bg-page: #f1f5f9;
-  --bg-list: #e2e8f0;
+  /* Kokuban: 緑の黒板に、白いカードを貼る見た目。カードは白系のまま(読みやすさのため) */
+  --bg-page: #24503f; /* 黒板の緑 */
+  --bg-list: #1b4033; /* リストの下地(黒板より少し濃い緑) */
+  --chalk: #f6f3e7; /* チョークの白 */
+  --chalk-dim: #d3dccf; /* 薄いチョーク(補助の文字) */
+  --wood: #8a5a2f; /* 黒板の枠の木 */
   --bg-card: #ffffff;
   --text: #0f172a;
   --text-sub: #475569;
@@ -53,11 +57,29 @@ body {
 .board-header {
   flex: none;
   padding: 12px 16px;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border);
+  color: var(--chalk);
+  background: #153325;
+  border-bottom: 4px solid var(--wood);
+}
+
+.board-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* アプリの名前。チョークで書いたような、白い文字 */
+.board-brand {
+  flex: none;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--chalk);
 }
 
 .board-title {
+  min-width: 0;
   margin: 0;
   font-size: 1.125rem;
   font-weight: 700;
@@ -71,7 +93,7 @@ body {
   flex: none;
   margin: 0;
   padding: 12px 16px;
-  color: var(--text-sub);
+  color: var(--chalk);
 }
 
 /* ---- リスト(横に並べる) ---- */
@@ -93,6 +115,7 @@ body {
   /* リストの中は縦にスクロールする */
   overflow-y: auto;
   padding: 0 8px 8px;
+  color: var(--chalk);
   background: var(--bg-list);
   border-radius: 8px;
   scroll-snap-align: start;
@@ -139,7 +162,7 @@ body {
 
 .list-empty {
   margin: 8px 0;
-  color: var(--text-sub);
+  color: var(--chalk-dim);
 }
 
 .list-cards {
@@ -155,6 +178,7 @@ body {
 
 .card {
   padding: 8px;
+  color: var(--text);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -569,7 +593,7 @@ body {
   padding: 0 8px;
   font: inherit;
   text-align: left;
-  color: var(--text-sub);
+  color: var(--chalk);
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -577,7 +601,7 @@ body {
 }
 
 .add-card-button:hover {
-  background: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .add-card-button:focus-visible,
@@ -639,7 +663,7 @@ body {
 /* ---- 読み込み中・失敗・ボードなし ---- */
 
 .skeleton {
-  background: #cbd5e1;
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 8px;
   animation: pulse 1.4s ease-in-out infinite;
 }

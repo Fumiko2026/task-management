@@ -13,8 +13,12 @@ describe('BoardPage', () => {
 
     render(<BoardPage />)
     expect(screen.getByRole('status')).toHaveTextContent('読み込み中')
+    // 読み込み中は、アプリの名前が見出しになる
+    expect(screen.getByRole('heading', { level: 1, name: 'Kokuban' })).toBeInTheDocument()
 
     expect(await screen.findByRole('heading', { level: 1, name: 'はじめてのボード' })).toBeInTheDocument()
+    // 読み込んだあとも、アプリの名前を、ヘッダーに出す
+    expect(screen.getByText('Kokuban')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/board', expect.anything())
   })
 
