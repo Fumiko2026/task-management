@@ -1,2 +1,9 @@
 # 秘密情報(DB のパスワードなど)
 .env
+
+# Terraform(状態ファイルや、自分の値には、秘密が入ることがある)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
