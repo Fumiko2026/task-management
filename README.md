@@ -118,6 +118,7 @@ Trello 風のカンバン形式タスク管理アプリです。スマートフ�
 | [docs/screen-card-detail.md](docs/screen-card-detail.md) | 画面仕様 2: カード詳細画面 |
 | [docs/er-diagram.md](docs/er-diagram.md) | ER図(データの設計) |
 | [docs/table-definition.md](docs/table-definition.md) | テーブル定義書(最小版) |
+| [docs/deploy-aws.md](docs/deploy-aws.md) | AWS へのデプロイ手順書(AWS CLI + Terraform、認証つき) |
 
 ## 10. 課題の進め方
 
