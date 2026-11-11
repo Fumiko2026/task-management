@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 初版(準備と認証の手順。Terraform のコードは、これから作る) |
+| 状態 | 版 0.2(準備と認証は、実際に試して確認ずみ。Terraform のコードは、これから作る) |
 | 目的 | Kokuban を AWS 上で動かす。**マネジメントコンソール(ブラウザの管理画面)は手で触らず**、コマンド(AWS CLI と Terraform)だけで作る。AI(Claude Code)にコマンドを実行させる |
 | 対象 | 初心者。専門用語には一言の説明をつける |
 | リージョン | 東京(`ap-northeast-1`) |
@@ -19,13 +19,14 @@
 |---|---|---|
 | 0 | AWS のアカウントを作る・守る(ブラウザで、一度だけ) | **人** |
 | 1 | AWS CLI と Terraform を Mac に入れる | 人(または AI) |
-| 2 | 認証する(SSO ログイン。§4) | **人** |
+| 2 | 認証する(`aws login`。§4) | **人** |
+| 2.5 | 作業用のアカウントを作る(§2 の「アカウントの分け方」) | AI(人が内容を確認) |
 | 3 | Terraform の置き場(state 用の S3)を作る | AI(人が内容を確認) |
 | 4 | Terraform で、サーバーなどを作る(`plan` → 確認 → `apply`) | AI が `plan`、**人が確認して** `apply` |
 | 5 | アプリをのせて、動作を確かめる | AI |
 | 6 | 公開前のチェック(§7)・片づけ(§9) | 人と AI |
 
-**コンソールを触るのは、段階 0 の、アカウント作成・MFA・SSO ユーザーの作成だけ**(アカウントそのものは、コマンドでは作れないため)。それ以降は、すべてコマンドです。
+**コンソールを触るのは、段階 0 の、アカウント作成・MFA だけ**(アカウントそのものは、コマンドでは作れないため)。それ以降は、すべてコマンドです。
 
 ---
 
@@ -51,6 +52,25 @@
 
 **あとで本格的にするなら**(今は作らない): 画面を S3 + CloudFront、バックエンドを ECS(Fargate)または App Runner、DB を RDS に分ける。壊れにくく、運用は楽になりますが、**費用が上がり、部品が増えます**(目安として、月 1 万円前後から)。学習の段階では、EC2 1 台で十分です。
 
+### アカウントの分け方(管理用と作業用)
+AWS のアカウントは、1 つの「組織」の中に、複数持てます(アカウントを増やしても、**それだけでは費用はかかりません**。請求は、管理用にまとまります)。
+
+| アカウント | 役割 | Kokuban のサーバーを作るか |
+|---|---|---|
+| 管理用(Management Account) | 組織・請求・ログインの設定をまとめる、大事なアカウント | **作らない** |
+| AWS が自動で作ったもの(例: Identity Delegated Admin、Greenfield Adventures) | ログイン管理や見本用 | **触らない** |
+| **作業用(Kokuban)** | Kokuban のサーバーなどを、Terraform で作る場所 | **ここに作る** |
+
+**作業用アカウントを分ける理由:** AI がコマンドを実行するので、間違えたときの影響を、**そのアカウントの中だけ**に閉じ込めるためです。片づけも、アカウントごと閉じれば、すっきりします。
+
+作り方(管理用のログインで、一度だけ。メールアドレスは、**管理用とは別**のものが必要です。Gmail なら、`@` の前に `+kokuban` をつけた別名が、同じ受信箱に届くので使えます):
+```
+aws organizations create-account --account-name Kokuban --email <メールアドレス> --role-name OrganizationAccountAccessRole
+aws organizations list-accounts --query 'Accounts[].{Name:Name,Id:Id,Status:Status}' --output table   # 作れたか確認
+```
+- 作ったアカウントへは、管理用のログインから、`OrganizationAccountAccessRole`(作成時に自動でできる役割)で入ります。Identity Center の割り当ては、要りません。
+- **注意:** アカウントは、作るのは簡単でも、**閉じるのには制限があります**(閉じたあとも、しばらく残り、閉じられる数にも上限があります)。名前とメールアドレスは、決めてから作ります。
+
 ### 費用の目安(東京・概算。料金は変わるので、必ず公式で確認する)
 | 項目 | 目安(月) |
 |---|---|
@@ -73,14 +93,15 @@
 3. 請求の通知を有効にする(請求ダッシュボードで、請求アラートの設定)。
 4. ルートユーザーのパスワードと MFA は、パスワード管理アプリなど、安全な場所に保管する。
 
-### 3-2. 日常用のユーザーを作る(IAM Identity Center。ブラウザ、一度だけ)
+### 3-2. (代替の方法)日常用のユーザーを作る(IAM Identity Center。ブラウザ、一度だけ)
+> **今回は、この方法を使わず、§4 の `aws login` で進めました。** 次の場合に、この方法を使います: `aws login` が使えない、複数の人で使う、など。
 **IAM Identity Center**(以前の名前は AWS SSO)は、**一時的な資格情報**(数時間で切れる鍵)で AWS CLI を使えるようにする仕組みです。**長期のアクセスキー(消えない鍵)を作らずに済む**ので、いまの標準の方法です。
 
-1. リージョンを**東京**にして、IAM Identity Center を有効にする。
+1. IAM Identity Center を有効にする(**組織インスタンス**で有効にする。「アカウントインスタンス」では、AWS アカウントへの割り当てができません)。
 2. ユーザーを 1 人作る(自分用。メールアドレスで招待が届く)。**このユーザーにも MFA を設定する。**
 3. 権限セット(どこまでできるか)を作る。
    - 学習中は `AdministratorAccess` でも構いません。ただし、**慣れたら、EC2・S3・SSM・IAM(必要な範囲)だけに絞る**(§5)。
-4. 自分のアカウントに、そのユーザー + 権限セットを割り当てる。
+4. 自分のアカウントに、そのユーザー + 権限セットを**割り当てる**。**これを忘れると、`aws configure sso` で `No AWS accounts are available to you` と出ます**(ユーザーを作っただけでは、アカウントを使う権限は、つきません)。
 5. 画面に出る **「AWS アクセスポータルの URL」**(`https://xxxx.awsapps.com/start`)を控える。次の §4 で使います。
 
 ### 3-3. Mac に道具を入れる(段階 1)
@@ -89,7 +110,7 @@
 brew install awscli                              # AWS CLI v2
 brew tap hashicorp/tap
 brew install hashicorp/tap/terraform             # Terraform(公式の配布元から)
-brew install --cask session-manager-plugin       # サーバーへ接続する部品(SSM)
+brew install --cask session-manager-plugin       # サーバーへ接続する部品(SSM)※下の注意
 ```
 確認:
 ```
@@ -97,40 +118,65 @@ aws --version
 terraform version
 ```
 > `brew install terraform` では、古いバージョンが入ることがあります。上のように、HashiCorp の配布元から入れます。
+> `session-manager-plugin` のインストールでは、**Mac のログインパスワード**を聞かれます。AI は、パスワードを扱わないので、**自分のターミナルで**実行してください(サーバーができるまでは、不要です)。
+> 確認ずみのバージョン: AWS CLI 2.40.0、Terraform 1.17.1(Apple Silicon)。
 
 ---
 
 ## 4. 認証する(段階 2)
 
-### 4-1. 初回の設定(一度だけ)
+### 4-1. ログインする(`aws login`。おすすめ)
+**`aws login`** は、ブラウザの管理画面と同じログインで、AWS CLI を使えるようにします(資格情報は、数時間で切れる一時的なものです)。長期のアクセスキーは、作りません。Google などで、管理画面にサインインしている場合も使えます。
 ```
-aws configure sso
+aws login --profile kokuban
 ```
 聞かれる内容と、答え方:
-| 質問 | 答え |
+| 場面 | 答え |
 |---|---|
-| SSO session name | `kokuban`(好きな名前) |
-| SSO start URL | §3-2 で控えた「アクセスポータルの URL」 |
-| SSO region | 東京の場合 `ap-northeast-1` |
-| registration scopes | そのまま Enter(`sso:account:access`) |
+| `AWS Region [us-east-1]:` | **`ap-northeast-1`** と**自分で入力**して Enter(`[ ]` の中は、初期値です) |
+| ブラウザで、サインインするアカウントを選ぶ画面 | **「Account: root」と書かれていない方**を選ぶ(権限つきの役割のもの)。**ルートは選ばない** |
+| ブラウザの確認文(「AWS CLI などが認証情報を使うことを許可」) | 自分のパソコンの CLI への許可なので、進めてよい |
+| 成功のあとの `Configure AWS skills and the AWS MCP server for your AI coding agent(s)? [y/n/never]` | **`n`**(AI ツールの設定には、いまは手を加えない) |
 
-ブラウザが開くので、ログインして、許可する。戻ったら、次を聞かれます。
-| 質問 | 答え |
-|---|---|
-| アカウント・ロール | 自分のアカウントと、割り当てた権限セットを選ぶ |
-| default client Region | `ap-northeast-1` |
-| default output format | `json` |
-| profile name | `kokuban`(好きな名前。**このあと、この名前で呼ぶ**) |
+成功すると、`Updated profile kokuban to use arn:aws:sts::…:assumed-role/… credentials.` と出ます。
 
 ### 4-2. ふだんのログインと確認(作業を始めるたびに)
 ```
-aws sso login --profile kokuban          # ブラウザで承認。資格情報は数時間で切れる
+aws login --profile kokuban              # 切れていたら、もう一度ログイン(数時間で切れる)
 export AWS_PROFILE=kokuban               # このターミナルでは、このプロファイルを使う
 aws sts get-caller-identity              # 「自分は誰か」を表示。アカウント番号が出れば成功
 ```
-- `aws sts get-caller-identity` の結果に、**自分のアカウント番号**が出ることを、毎回確かめる(別のアカウントに作業しないため)。
-- 切れたら、もう一度 `aws sso login --profile kokuban`。
-- Terraform も、`AWS_PROFILE` を見て、同じ資格情報を使います(別の設定は要りません)。
+- `aws sts get-caller-identity` の結果に、**自分のアカウント番号**と、**ルートではなく、役割(`assumed-role/…`)**が出ることを、毎回確かめる。
+- **Terraform も動くことを確認ずみ**です(`provider "aws" { profile = "kokuban" }` で、アカウント番号を読む試験。何も作らず、費用もかからない)。`AWS_PROFILE` を見るので、別の設定は要りません。
+
+### 4-2b. (代替)`aws configure sso`(IAM Identity Center を使う場合)
+§3-2 の準備ができているときだけ使えます。
+```
+aws configure sso
+aws sso login --profile kokuban
+```
+| 質問 | 答え |
+|---|---|
+| SSO session name | `kokuban`(好きな名前) |
+| SSO start URL | Identity Center の「AWS access portal URL」 |
+| SSO region | **Identity Center を作ったリージョン**(`us-east-1` のことが多い) |
+| registration scopes | そのまま Enter |
+| アカウント・ロール | 割り当てた、自分のアカウントと権限セット |
+| default client Region | `ap-northeast-1` |
+| default output format | `json` |
+| profile name | `kokuban` |
+
+### 4-2c. つまずいたとき(実際にあったこと)
+| 症状 | 原因と対処 |
+|---|---|
+| `No AWS accounts are available to you` | Identity Center の**ユーザーに、アカウントが割り当てられていない**。割り当てるか、`aws login`(§4-1)を使う |
+| アクセスポータルに「AWS アカウントを持っていません」と出る | 同上。**検索欄にメールアドレスが自動入力されて、0 件に見える**こともある(×で消して確かめる) |
+| 左のメニューに「マルチアカウント権限(AWS アカウント・権限セット)」が無い | 「アカウントインスタンス」で作った、または委任された管理者が設定されている。無理に直さず、`aws login` を使う |
+| `The config profile (kokuban) could not be found` | まだ設定が終わっていない。`aws login --profile kokuban` を最後まで実行する |
+| 質問の入力欄に、**コマンドを貼り付けてしまった**(`Invalid response` と出る) | 質問に答える途中で、別のコマンドを貼らない。`Control + C` で止めて、やり直す |
+| `AWS Region [us-east-1]:` で止まる | エラーではない。`ap-northeast-1` と入力する |
+| Cursor の「問題」に、`schemastore.org からスキーマを読み込めません` と出る | エディタの警告。AWS とは無関係なので、無視してよい |
+| 「Account: root」と書かれたログインの選択肢 | ルートユーザー。**CLI には使わない**。使い終わったら、ブラウザからサインアウトする |
 
 ### 4-3. やってはいけないこと
 - **ルートユーザーの資格情報で、CLI を使わない。**
@@ -260,17 +306,18 @@ aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<
 ---
 
 ## 8. 進め方(イシューの分け方・案)
-1. 【準備】アカウント・MFA・SSO・道具・`aws sso login`(この手順書の §3・§4)← **まず人が行う**
-2. 【Terraform の土台】`infra/`、state 用 S3、`.gitignore`、`terraform plan` が通る
-3. 【サーバー】EC2・セキュリティグループ(自分の IP だけ)・SSM・Budgets を `apply`
-4. 【コンテナ化】`backend/Dockerfile`、nginx、本番用の `docker-compose`、設定の分け方
-5. 【デプロイ】サーバーへのせて、`/actuator/health` と画面を確認
-6. 【公開の前】ログイン、HTTPS、バックアップ、チェックリスト(§7-2)
+1. 【準備】アカウント・MFA・道具・`aws login`(この手順書の §3・§4)← **まず人が行う(完了)**
+2. 【作業用アカウント】`Kokuban` アカウントを作り、予算の上限(Budgets)を作る(§2)
+3. 【Terraform の土台】`infra/`、state 用 S3、`.gitignore`、`terraform plan` が通る
+4. 【サーバー】EC2・セキュリティグループ(自分の IP だけ)・SSM・Budgets を `apply`
+5. 【コンテナ化】`backend/Dockerfile`、nginx、本番用の `docker-compose`、設定の分け方
+6. 【デプロイ】サーバーへのせて、`/actuator/health` と画面を確認
+7. 【公開の前】ログイン、HTTPS、バックアップ、チェックリスト(§7-2)
 
 各段階で、AI は「何をするか → `plan` → 人が確認 → `apply` → 確かめた結果」を報告します。
 
 ### AI(Claude Code)への頼み方の例
-> `AWS_PROFILE=kokuban` でログインずみです。`docs/deploy-aws.md` の段階 2 を進めてください。`infra/` に Terraform の土台を作り、`terraform plan` までを実行して、結果を、作る・変える・消すに分けて報告してください。`apply` は、私が確認してから指示します。
+> `aws login --profile kokuban` でログインずみで、`AWS_PROFILE=kokuban` です。`docs/deploy-aws.md` の、Terraform の土台(§6)を進めてください。`infra/` に Terraform の土台を作り、`terraform plan` までを実行して、結果を、作る・変える・消すに分けて報告してください。`apply` は、私が確認してから指示します。
 
 ---
 
@@ -289,3 +336,4 @@ aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<
 | D-03 | 月の予算の上限 | 5,000 円(超えそうなときにメール) |
 | D-04 | 権限セット | 最初は `AdministratorAccess`(学習用)。サーバーが動いたら、絞る |
 | D-05 | 構成 | まず EC2 1 台。慣れたら、画面を S3 + CloudFront、DB を RDS に分けるか検討 |
+| D-06 | 作業用アカウントのメールアドレス | 管理用とは別のアドレスが必要。Gmail の `+kokuban` の別名が使える(§2 の「アカウントの分け方」) |
