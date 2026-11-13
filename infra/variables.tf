@@ -20,15 +20,3 @@ variable "allowed_cidrs" {
     error_message = "allowed_cidrs は CIDR(例: 203.0.113.10/32)で指定してください。"
   }
 }
-
-variable "budget_usd" {
-  description = "月の予算の上限(ドル)。超えそうなときにメールする"
-  type        = number
-  default     = 5
-}
-
-variable "budget_email" {
-  description = "予算の通知先。空なら予算は作らない"
-  type        = string
-  default     = ""
-}
