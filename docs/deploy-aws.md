@@ -183,7 +183,7 @@ export AWS_PROFILE=kokuban               # このターミナルでは、この�
 aws sts get-caller-identity              # 「自分は誰か」を表示。アカウント番号が出れば成功
 ```
 - `aws sts get-caller-identity` の結果に、**自分のアカウント番号**と、**ルートではなく、役割(`assumed-role/…`)**が出ることを、毎回確かめる。
-- **Terraform も動くことを確認ずみ**です(`provider "aws" { profile = "kokuban" }` で、アカウント番号を読む試験。何も作らず、費用もかからない)。`AWS_PROFILE` を見るので、別の設定は要りません。
+- **Terraform も動くことを確認ずみ**です(**AWS プロバイダは 6 系が必要**。`infra/versions.tf` は `~> 6.0`)(`provider "aws" { profile = "kokuban" }` で、アカウント番号を読む試験。何も作らず、費用もかからない)。`AWS_PROFILE` を見るので、別の設定は要りません。
 
 ### 4-2b. (代替)`aws configure sso`(IAM Identity Center を使う場合)
 §3-2 の準備ができているときだけ使えます。
@@ -208,6 +208,7 @@ aws sso login --profile kokuban
 | `No AWS accounts are available to you` | Identity Center の**ユーザーに、アカウントが割り当てられていない**。割り当てるか、`aws login`(§4-1)を使う |
 | アクセスポータルに「AWS アカウントを持っていません」と出る | 同上。**検索欄にメールアドレスが自動入力されて、0 件に見える**こともある(×で消して確かめる) |
 | 左のメニューに「マルチアカウント権限(AWS アカウント・権限セット)」が無い | 「アカウントインスタンス」で作った、または委任された管理者が設定されている。無理に直さず、`aws login` を使う |
+| Terraform が `No valid credential sources found` で止まる(`aws login` はできているのに) | Terraform の **AWS プロバイダが古い(5 系)**。`aws login` の資格情報を読めるのは **6 系**。`infra/versions.tf` を `version = "~> 6.0"` にして `terraform init -upgrade` |
 | `The config profile (kokuban) could not be found` | まだ設定が終わっていない。`aws login --profile kokuban` を最後まで実行する |
 | 質問の入力欄に、**コマンドを貼り付けてしまった**(`Invalid response` と出る) | 質問に答える途中で、別のコマンドを貼らない。`Control + C` で止めて、やり直す |
 | `AWS Region [us-east-1]:` で止まる | エラーではない。`ap-northeast-1` と入力する |
