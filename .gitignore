@@ -7,3 +7,7 @@
 *.tfstate.*
 *.tfvars
 crash.log
+
+# terraform plan -out の出力(自分の IP などが入る)
+tfplan
+*.tfplan

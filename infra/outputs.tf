@@ -20,5 +20,5 @@ output "http_url" {
 
 output "ssm_start_session" {
   description = "サーバーへ入るコマンド(SSH は使わない)"
-  value       = "aws ssm start-session --target ${aws_instance.app.id} --profile kokuban --region ${var.region}"
+  value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.region}"
 }

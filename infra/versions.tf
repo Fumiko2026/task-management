@@ -8,25 +8,11 @@ terraform {
     }
   }
 
-  # バケットは infra/bootstrap-state.sh で先に作る(terraform destroy では消さない)。
-  backend "s3" {
-    bucket       = "kokuban-tfstate-973724508368"
-    key          = "kokuban/terraform.tfstate"
-    region       = "ap-northeast-1"
-    profile      = "kokuban"
-    use_lockfile = true
-    encrypt      = true
-  }
+  # state(今 AWS に何があるかの記録)は、ローカルの infra/terraform.tfstate に置く(S3 は使わない)。
+  # *.tfstate は Git に上げない(.gitignore)。なくさないよう、使い終わるまで消さない。
 }
 
 provider "aws" {
-  region  = var.region
-  profile = "kokuban"
-}
-
-# Budgets の API は us-east-1
-provider "aws" {
-  alias   = "us_east_1"
-  region  = "us-east-1"
-  profile = "kokuban"
+  region = var.region
+  # profile は書かない。使うプロファイルは、環境変数 AWS_PROFILE(例: export AWS_PROFILE=kokuban)で決める。
 }
