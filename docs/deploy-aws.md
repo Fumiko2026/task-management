@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 版 0.2(準備と認証は、実際に試して確認ずみ。Terraform のコードは、これから作る) |
+| 状態 | 版 0.4(**無料の範囲に絞った最小構成**。Terraform は **EC2 まで**。S3・Budgets・RDS・アプリのデプロイは、Terraform の対象外) |
 | 目的 | Kokuban を AWS 上で動かす。**マネジメントコンソール(ブラウザの管理画面)は手で触らず**、コマンド(AWS CLI と Terraform)だけで作る。AI(Claude Code)にコマンドを実行させる |
 | 対象 | 初心者。専門用語には一言の説明をつける |
 | リージョン | 東京(`ap-northeast-1`) |
@@ -21,7 +21,7 @@
 | 1 | AWS CLI と Terraform を Mac に入れる | 人(または AI) |
 | 2 | 認証する(`aws login`。§4) | **人** |
 | 2.5 | 作業用のアカウントを作る(§2 の「アカウントの分け方」) | AI(人が内容を確認) |
-| 3 | Terraform の置き場(state 用の S3)を作る | AI(人が内容を確認) |
+| 3 | Terraform の準備(`terraform init`。state はローカルに置く。S3 は作らない) | AI(人が内容を確認) |
 | 4 | Terraform で、サーバーなどを作る(`plan` → 確認 → `apply`) | AI が `plan`、**人が確認して** `apply` |
 | 5 | アプリをのせて、動作を確かめる | AI |
 | 6 | 公開前のチェック(§7)・片づけ(§9) | 人と AI |
@@ -35,22 +35,32 @@
 学習・個人利用なので、**安く、シンプルな構成**から始めます。
 
 ```
- あなたのパソコン ──(自分の IP だけ許可)──▶ EC2(1台)
-                                              ├─ nginx    … 画面(React)を配り、/api をバックエンドへ中継
-                                              ├─ backend  … Spring Boot(コンテナ)
-                                              └─ db       … PostgreSQL 17(コンテナ。データはディスクに保存)
+ あなたのパソコン ──(自分の IP だけ許可・HTTP 80)──▶ EC2(1台)
+                                                      ├─ nginx    … いまは「Kokuban EC2 OK」の確認ページ。あとで画面(React)と /api の中継
+                                                      ├─ backend  … あとで同じサーバーに載せる(Spring Boot)
+                                                      └─ db       … いまは作らない。次の段階で検討(まずは EC2 の動作確認)
 ```
+
+**いま Terraform で作るもの(EC2 まで):**
 
 | 部品 | 内容 | 理由 |
 |---|---|---|
-| EC2(`t4g.small`、Amazon Linux 2023) | サーバー 1 台。Docker Compose で、今の `docker-compose.yml` に近い形で動かす | いちばん安く、いまの作りに近い。仕組みを学びやすい |
-| Elastic IP | 変わらない住所(IP アドレス) | 再起動しても、住所が変わらない |
-| セキュリティグループ | 通信の許可の表。**自分の IP だけ** 80/443 を許可。SSH(22)は開けない | ログインが無いため |
-| SSM Session Manager | サーバーへの接続方法。**SSH の鍵を作らずに**、AWS CLI で接続できる | 鍵の管理が要らず、安全 |
-| SSM Parameter Store(SecureString) | DB のパスワードの保管場所 | パスワードを、コードや Git に置かない |
-| S3(Terraform の state 用) | Terraform の記録(今何を作っているか)の保管場所 | 次回以降も、続きから作業できる |
+| EC2(`t4g.small`、Amazon Linux 2023 arm64) | サーバー 1 台。フロントとバックエンドを、**同じサーバー**に載せる前提 | いちばん単純。無料枠・使うときだけ、に合わせやすい |
+| デフォルト VPC | 新しい VPC は作らない。公開 IP は起動時に自動で付く | 部品を増やさない |
+| セキュリティグループ | **自分の PC の IP だけ**から 80。SSH(22)は開けない | ログインが無いため。自分以外は届かない |
+| SSM Session Manager | サーバーへの入り方。**SSH の鍵は作らない** | 鍵の管理が要らず、安全 |
+| state(Terraform の記録) | **ローカル**(`infra/terraform.tfstate`)。S3 は作らない。Git には上げない | 部品を増やさない。一人で使うので、ロックも要らない |
 
-**あとで本格的にするなら**(今は作らない): 画面を S3 + CloudFront、バックエンドを ECS(Fargate)または App Runner、DB を RDS に分ける。壊れにくく、運用は楽になりますが、**費用が上がり、部品が増えます**(目安として、月 1 万円前後から)。学習の段階では、EC2 1 台で十分です。
+**いま作らないもの:** S3(state 用を含む)、Budgets(予算は CLI で 1 回だけ作る。§6-2)、RDS、Elastic IP、ALB、NAT Gateway、ECR、CloudFront、Route 53。アプリの Docker イメージも、まだ載せない。
+
+**進め方(順番):**
+1. Terraform で EC2 を作り、自分の PC から `http://<公開 IP>/` が「Kokuban EC2 OK」になることを確かめる
+2. 次に DB(RDS にするか、同じサーバーのコンテナにするか)を決めて足す
+3. 最後に、フロントとバックエンドを同じサーバーへ載せる
+
+使わないときは `terraform destroy` で消してよい(データも消える)。
+
+**あとで本格的にするなら**(今は作らない): 画面を S3 + CloudFront、バックエンドを ECS(Fargate)または App Runner、DB を RDS に分ける。壊れにくく、運用は楽になりますが、**費用が上がり、部品が増えます**。
 
 ### アカウントの分け方(管理用と作業用)
 AWS のアカウントは、1 つの「組織」の中に、複数持てます(アカウントを増やしても、**それだけでは費用はかかりません**。請求は、管理用にまとまります)。
@@ -63,6 +73,8 @@ AWS のアカウントは、1 つの「組織」の中に、複数持てます(�
 
 **作業用アカウントを分ける理由:** AI がコマンドを実行するので、間違えたときの影響を、**そのアカウントの中だけ**に閉じ込めるためです。片づけも、アカウントごと閉じれば、すっきりします。
 
+> **作業用アカウントを作る前の確認(未確認):** 組織の中の新しいアカウントに、**クレジットや無料の枠が使えるか**は、まだ確認できていません。管理用アカウントの「クレジット」の画面と、上のコマンドで確認してから決めます。使えない場合は、**管理用アカウントには作らず**、少額で済むことを確認したうえで、作業用アカウントを作ります。
+
 作り方(管理用のログインで、一度だけ。メールアドレスは、**管理用とは別**のものが必要です。Gmail なら、`@` の前に `+kokuban` をつけた別名が、同じ受信箱に届くので使えます):
 ```
 aws organizations create-account --account-name Kokuban --email <メールアドレス> --role-name OrganizationAccountAccessRole
@@ -71,13 +83,37 @@ aws organizations list-accounts --query 'Accounts[].{Name:Name,Id:Id,Status:Stat
 - 作ったアカウントへは、管理用のログインから、`OrganizationAccountAccessRole`(作成時に自動でできる役割)で入ります。Identity Center の割り当ては、要りません。
 - **注意:** アカウントは、作るのは簡単でも、**閉じるのには制限があります**(閉じたあとも、しばらく残り、閉じられる数にも上限があります)。名前とメールアドレスは、決めてから作ります。
 
+### 「無料」の正確な意味(2026 年 11 月に、AWS の公式ページで確認)
+> 「請求がゼロ」を**約束する構成ではありません**。「クレジットの範囲で、少額に収まる構成」です。
+
+| 項目 | 内容 |
+|---|---|
+| 新しいアカウントのクレジット | 最初に **$100**、さらに活動(使い方の課題)で **最大 $100**。[公式](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html) |
+| **無料プラン**(Free plan) | **請求は発生しない**が、**6 か月、またはクレジットを使い切ると、アカウントが自動で閉じる**。使えるサービスも限られる |
+| **組織(AWS Organizations)に入ると** | 無料プランは、**自動で有料プランに変わる**(公式に明記)。**いまのアカウントは組織(MainTeam)に入っているため、有料プランの可能性が高い**(下の確認方法) |
+| **有料プラン**(Paid plan) | クレジットを使い切るまでは請求されない。**使い切ったあとは、通常の料金が請求される**(アカウントは閉じない) |
+| EC2 `t4g.small` の無料トライアル | **2026 年末まで**(第三者の調査記事。[参考](https://dev.classmethod.jp/en/articles/ec2-t4g-small-free-tier-2026/))。**年が明けたあとは、通常料金**(目安: 起動しっぱなしで月 2,000 円前後) |
+| ディスク(EBS)・公開 IPv4 | 課金の対象(クレジットで相殺される)。公開 IPv4 は EC2 で月 750 時間まで無料の枠があるが、条件は変わる |
+
+**いまのプランの確認方法(読むだけ。`aws login` のあと):**
+```
+aws freetier get-account-plan-state --region us-east-1
+```
+Billing and Cost Management の「クレジット」の画面でも、**残りのクレジットと期限**が見られます。
+
+**費用を抑えるやり方(この構成の前提):**
+1. 使うときだけ作り、**終わったら `terraform destroy`**(§9)。
+2. 作ったままにするときは、**使わない間は EC2 を停止**する(停止中は、サーバーの料金がかからない。ディスクの料金は、少しかかる)。
+3. **予算アラート**(月 5 ドル)を、CLI で 1 回だけ作る(§6-2)。
+4. CPU クレジットは `standard`(追加料金が出ない設定)にしてある(`infra/main.tf`)。
+
 ### 費用の目安(東京・概算。料金は変わるので、必ず公式で確認する)
 | 項目 | 目安(月) |
 |---|---|
-| EC2 `t4g.small`(つけっぱなし) | 約 2,000 円 |
-| ディスク(EBS 20GB) | 約 300 円 |
-| 公開 IPv4 アドレス(Elastic IP) | 約 600 円 |
-| **合計** | **月 3,000 円前後** |
+| EC2 `t4g.small`(起動している時間だけ) | 有料なら 1 時間あたり数円(目安) |
+| ディスク(EBS 8GB) | 起動中・残している間だけ |
+| 公開 IPv4(自動割り当て。Elastic IP は使わない) | 起動している時間だけ |
+| **合計** | **使う時間だけ。使わないときは destroy で止める** |
 
 - 使わないときは `terraform destroy`(すべて消す)で、費用を止められます(§9)。
 - 新しいアカウントには、無料枠がつく場合があります。条件は変わるので、AWS の公式ページで確認してください。
@@ -194,7 +230,7 @@ AI は便利ですが、**権限が大きいほど、間違いの被害も大き
    - `plan` は「これから何を作る・消すか」の一覧で、何も変えません。**「destroy(消す)」や「replace(作り直す)」が含まれていないか**を、必ず読みます。
 2. AI に渡すのは、**`AWS_PROFILE=kokuban` だけ**。アクセスキーは渡さない(そもそも作らない)。
 3. 権限は、**必要な範囲に、だんだん絞る**(最初は広くても、慣れたら絞る)。
-4. **予算の上限を作る**(AWS Budgets。月 3,000〜5,000 円など。超えそうなときにメールが届く)。Terraform の `aws_budgets_budget` で作れます。
+4. **予算の上限を作る**(AWS Budgets。月 5 ドルなど。超えそうなときにメールが届く)。**Terraform ではなく、CLI で 1 回だけ**作ります(§6-2)。
 5. Claude Code の許可設定(`.claude/settings.json`)で、**確認なしに実行してよいコマンド**と、**必ず確認するコマンド**を分ける。
    - 確認なしでよい(読むだけ): `aws sts get-caller-identity`、`terraform fmt`、`terraform validate`、`terraform plan`、`aws ... describe-*` / `list-*`。
    - **必ず確認する**: `terraform apply`、`terraform destroy`、`aws ... delete-*`、`aws iam ...`、`aws s3 rm`。
@@ -208,11 +244,12 @@ AI は便利ですが、**権限が大きいほど、間違いの被害も大き
 ### 6-1. 置き場所とファイル(案)
 ```
 infra/
-├─ main.tf          # EC2、セキュリティグループ、Elastic IP、IAM など
-├─ variables.tf     # 変更できる値(自分の IP、インスタンスの種類など)
-├─ outputs.tf       # 作ったあとに表示する値(サーバーの住所など)
-├─ versions.tf      # Terraform と AWS プロバイダのバージョン、state の置き場所
-└─ terraform.tfvars # 自分の値(例: 自分の IP)。※ Git に上げない
+├─ main.tf                   # EC2、セキュリティグループ、IAM(RDS や Elastic IP は書かない)
+├─ variables.tf              # 変更できる値(自分の IP、インスタンスの種類など)
+├─ outputs.tf                # 作ったあとに表示する値(サーバーの住所など)
+├─ versions.tf               # Terraform と AWS プロバイダのバージョン(state はローカル)
+├─ terraform.tfvars.example  # 自分の値のひな形
+└─ terraform.tfvars          # 自分の IP など。※ Git に上げない
 ```
 **`.gitignore` に追加する**(このイシューで追加ずみ):
 ```
@@ -225,69 +262,51 @@ crash.log
 ```
 `.terraform.lock.hcl`(部品のバージョンの記録)は、**Git に上げる**。
 
-### 6-2. state の置き場(S3)を、先に作る
-Terraform の **state**(今 AWS に何があるかの記録)を、自分のパソコンだけに置くと、なくしたときに困ります。**S3 に置き**、バージョンを残し、暗号化し、公開しないようにします。
+### 6-2. state はローカルに置く。予算は CLI で作る
+**state**(今 AWS に何があるかの記録)は、`infra/terraform.tfstate` に、自分のパソコンへ置きます(S3 は作りません)。
+- 一人で、短い間だけ使うので、これで足ります。
+- **Git には上げません**(`.gitignore` の `*.tfstate`)。**消したりなくしたりすると、Terraform が、作ったものを忘れてしまいます**(AWS にサーバーが残り、費用がかかり続けます)。**`terraform destroy` を終えるまで、残してください**。
+- 万一なくしたときは、AWS のサーバー(EC2、セキュリティグループ、IAM の役割)を、コンソールではなく CLI で探して、手で消します。
+
+**予算アラート(月 5 ドル)は、Terraform ではなく、CLI で 1 回だけ作ります**(Terraform は EC2 までにするため)。メールアドレスは、自分のものを入れます。
 ```
-# バケット名は、世界で 1 つだけの名前にする(例: kokuban-tfstate-<アカウント番号>)
-aws s3api create-bucket --bucket <バケット名> --region ap-northeast-1 \
-  --create-bucket-configuration LocationConstraint=ap-northeast-1
-aws s3api put-bucket-versioning --bucket <バケット名> --versioning-configuration Status=Enabled
-aws s3api put-bucket-encryption --bucket <バケット名> \
-  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-aws s3api put-public-access-block --bucket <バケット名> \
-  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws budgets create-budget --account-id "$ACCOUNT_ID" \
+  --budget '{"BudgetName":"kokuban-monthly","BudgetLimit":{"Amount":"5","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+  --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"<自分のメールアドレス>"}]}]'
 ```
-`versions.tf` に、この場所を書きます(Terraform 1.10 以降は、S3 だけで「同時に 2 人が実行しない」ための鍵(ロック)も使えます)。
-```hcl
-terraform {
-  required_version = ">= 1.10"
-  backend "s3" {
-    bucket       = "<バケット名>"
-    key          = "kokuban/terraform.tfstate"
-    region       = "ap-northeast-1"
-    use_lockfile = true
-    encrypt      = true
-  }
-}
-```
-> この state 用バケットだけは、Terraform の管理の外(コマンドで直接)で作ります。**`terraform destroy` で消えない**ように、別にしておくためです。
+> 予算は、最初の 2 つまで無料です。作る場所は、**サーバーを作るアカウント**(いま使っているプロファイルのアカウント)です。
 
 ### 6-3. 日常の流れ
 ```
 cd infra
-terraform init        # 初回、部品(プロバイダ)をダウンロードして、state の置き場につなぐ
+terraform init        # 初回、部品(プロバイダ)をダウンロードする
 terraform fmt         # 書き方をそろえる
 terraform validate    # 書き間違いが無いか検査する
 terraform plan        # 何を作る・変える・消すかを表示(何も変えない) ← 人が読む
 terraform apply       # plan どおりに作る(確認の入力が出る。人が yes と答える)
 ```
 
-### 6-4. Terraform で作るもの(最初の版)
+### 6-4. Terraform で作るもの(最初の版 = EC2 まで)
 | 部品 | 内容 |
 |---|---|
-| `aws_instance` | EC2(`t4g.small`)。AMI は、AWS が公開している「最新の Amazon Linux 2023(arm64)」を、SSM のパラメータから取得する |
-| `aws_security_group` | 入ってくる通信: **自分の IP だけ**から 80(後で 443)。出る通信: すべて可。**22(SSH)は作らない** |
-| `aws_eip` | 変わらない IP アドレス |
-| `aws_iam_role` + instance profile | EC2 が、SSM(接続)と Parameter Store(パスワード)を使うための役割。`AmazonSSMManagedInstanceCore` を付ける |
-| `aws_ssm_parameter`(SecureString) | DB のパスワード。値は、`terraform.tfvars` ではなく、コマンドで入れる(下記) |
-| `aws_budgets_budget` | 予算の上限と、メール通知 |
+| `aws_instance` | EC2(`t4g.small`)。AMI は、AWS が公開している「最新の Amazon Linux 2023(arm64)」を、SSM のパラメータから取得する。CPU クレジットは `standard`。ディスクは gp3 8GB(暗号化)。起動時に Docker と nginx を入れ、確認用のページだけ出す |
+| `aws_security_group` | 入ってくる通信: **自分の PC の IP だけ**から 80。出る通信: すべて可。**22(SSH)は作らない** |
+| `aws_iam_role` + instance profile | EC2 が SSM で接続するための役割。`AmazonSSMManagedInstanceCore` を付ける |
 
-DB のパスワードは、Terraform のコードに値を書かず、先にコマンドで入れます。
-```
-aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<強いパスワード>'
-```
-> コマンドの履歴にパスワードが残ります。入れたら、`history` から消すか、パスワード管理アプリで生成した使い捨ての値にします。Terraform で作る場合も、state に値が入る点に注意が要ります(state は暗号化した S3 に置く)。
+**S3・Budgets・RDS・Elastic IP・DB のパスワード置き場は、Terraform では作らない。** DB は、EC2 の動作確認のあとに足す。
 
 ---
 
 ## 7. アプリをのせる(段階 5)と、公開の前のチェック
 
-### 7-1. のせ方(案)
+### 7-1. のせ方(案。**最後の段階**)
+EC2 の動作確認が終わってから行う。フロントとバックエンドは、**同じ EC2** に載せる。
 1. バックエンドを Docker イメージにする(`backend/Dockerfile`。Java 21 で `./mvnw package` した jar を動かす)。
 2. 画面を `npm run build` して、nginx で配る(`frontend/dist`)。nginx は `/api` と `/actuator/health` を backend へ中継する。
-3. サーバー上の `docker compose` で、nginx・backend・db を動かす。
+3. サーバー上の `docker compose` で、nginx・backend・(決めた DB)を動かす。
 4. サーバーへは、**SSM Session Manager**(`aws ssm start-session --target <インスタンス ID>`)で入る。SSH は使わない。
-5. 確かめる: `curl http://<Elastic IP>/actuator/health` が `{"status":"UP"}`。ブラウザで、ボードが出る。
+5. 自分の PC から確かめる: `curl http://<公開 IP>/` が確認ページ(のちほどアプリ)。他のネットワークからは届かない。
 
 **守ること(`CLAUDE.md` の「公開の範囲」との関係)**
 - DB(5432)は、**コンテナの中の通信だけ**にする(`ports:` で、サーバーの外に出さない)。
@@ -307,12 +326,13 @@ aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<
 
 ## 8. 進め方(イシューの分け方・案)
 1. 【準備】アカウント・MFA・道具・`aws login`(この手順書の §3・§4)← **まず人が行う(完了)**
-2. 【作業用アカウント】`Kokuban` アカウントを作り、予算の上限(Budgets)を作る(§2)
-3. 【Terraform の土台】`infra/`、state 用 S3、`.gitignore`、`terraform plan` が通る
-4. 【サーバー】EC2・セキュリティグループ(自分の IP だけ)・SSM・Budgets を `apply`
-5. 【コンテナ化】`backend/Dockerfile`、nginx、本番用の `docker-compose`、設定の分け方
-6. 【デプロイ】サーバーへのせて、`/actuator/health` と画面を確認
-7. 【公開の前】ログイン、HTTPS、バックアップ、チェックリスト(§7-2)
+2. 【確認】いまのプラン・クレジットを確認し(§2)、作業用アカウントを作るかを決める。予算アラートを CLI で作る(§6-2)
+3. 【Terraform の土台】`infra/`(state はローカル)、`terraform plan` が通る(EC2 まで。S3・Budgets・RDS は書かない)
+4. 【サーバー】EC2・セキュリティグループ(自分の PC の IP だけ)・SSM を `apply` し、確認ページを見る
+5. 【DB】RDS にするか、同じサーバーのコンテナにするかを決めて足す
+6. 【コンテナ化】`backend/Dockerfile`、nginx、本番用の `docker-compose`、設定の分け方
+7. 【デプロイ】同じサーバーにフロントとバックエンドをのせて確認
+8. 【公開の前】ログイン、HTTPS、バックアップ、チェックリスト(§7-2)
 
 各段階で、AI は「何をするか → `plan` → 人が確認 → `apply` → 確かめた結果」を報告します。
 
@@ -323,7 +343,8 @@ aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<
 
 ## 9. 片づけ(費用を止める)
 - サーバーなどをすべて消す: `cd infra && terraform destroy`(**消えるものを、よく読んでから**。データも消える。先に、DB のバックアップを取る)。
-- state 用の S3 バケットは、`destroy` では消えない。不要になったら、中身(全バージョン)を空にしてから、コマンドで消す。
+- `infra/terraform.tfstate`(ローカルの記録)は、`destroy` が終わるまで消さない。終わったあとは、消して構わない。
+- 予算アラートは、`aws budgets delete-budget --account-id <アカウント番号> --budget-name kokuban-monthly` で消せる(残しても、費用はかからない)。
 - 請求のダッシュボードで、**翌日以降に、費用が増えていない**ことを確かめる。
 
 ---
@@ -331,9 +352,10 @@ aws ssm put-parameter --name /kokuban/db_password --type SecureString --value '<
 ## 10. 未決事項(ご相談)
 | No. | 内容 | おすすめ |
 |---|---|---|
-| D-01 | 公開の範囲 | ログインができるまでは、**自分の IP だけ**。スクールの講師に見せたい場合は、その人の IP を足すか、一時的に公開して、すぐ止める |
+| D-01 | 公開の範囲 | ログインができるまでは、**自分の PC の IP だけ**。スクールの講師に見せたい場合は、その人の IP を足す |
 | D-02 | 独自ドメイン | 持っていなければ、まずは IP アドレスで動作確認。ログインを作る段階で、ドメインと HTTPS を用意する |
-| D-03 | 月の予算の上限 | 5,000 円(超えそうなときにメール) |
+| D-03 | 月の予算の上限 | 5 ドル(超えそうなときにメール)。CLI で 1 回だけ作る(§6-2) |
 | D-04 | 権限セット | 最初は `AdministratorAccess`(学習用)。サーバーが動いたら、絞る |
-| D-05 | 構成 | まず EC2 1 台。慣れたら、画面を S3 + CloudFront、DB を RDS に分けるか検討 |
+| D-05 | 構成 | まず EC2 1 台(フロントとバックエンドは同じサーバー)。RDS は EC2 の確認のあと |
 | D-06 | 作業用アカウントのメールアドレス | 管理用とは別のアドレスが必要。Gmail の `+kokuban` の別名が使える(§2 の「アカウントの分け方」) |
+| D-07 | 無料枠 | 利用者が確認済み。使うときだけ作り、終わったら消してよい |
