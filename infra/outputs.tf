@@ -22,3 +22,23 @@ output "ssm_start_session" {
   description = "サーバーへ入るコマンド(SSH は使わない)"
   value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.region}"
 }
+
+output "db_address" {
+  description = "RDS の接続先(ホスト名)。外には公開していない。EC2 からだけ届く"
+  value       = aws_db_instance.app.address
+}
+
+output "db_port" {
+  description = "RDS のポート"
+  value       = aws_db_instance.app.port
+}
+
+output "db_name" {
+  description = "最初に作られる DB の名前"
+  value       = aws_db_instance.app.db_name
+}
+
+output "db_secret_arn" {
+  description = "RDS のパスワードが入っている Secrets Manager のシークレット(中身は、ここには出さない)"
+  value       = aws_db_instance.app.master_user_secret[0].secret_arn
+}

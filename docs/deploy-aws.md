@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 版 0.4(**無料の範囲に絞った最小構成**。Terraform は **EC2 まで**。S3・Budgets・RDS・アプリのデプロイは、Terraform の対象外) |
+| 状態 | 版 0.5(**無料の範囲に絞った最小構成**。Terraform は **EC2 と RDS まで**。RDS への接続は確認ずみ。S3・Budgets・アプリのデプロイは、Terraform の対象外) |
 | 目的 | Kokuban を AWS 上で動かす。**マネジメントコンソール(ブラウザの管理画面)は手で触らず**、コマンド(AWS CLI と Terraform)だけで作る。AI(Claude Code)にコマンドを実行させる |
 | 対象 | 初心者。専門用語には一言の説明をつける |
 | リージョン | 東京(`ap-northeast-1`) |
@@ -51,11 +51,11 @@
 | SSM Session Manager | サーバーへの入り方。**SSH の鍵は作らない** | 鍵の管理が要らず、安全 |
 | state(Terraform の記録) | **ローカル**(`infra/terraform.tfstate`)。S3 は作らない。Git には上げない | 部品を増やさない。一人で使うので、ロックも要らない |
 
-**いま作らないもの:** S3(state 用を含む)、Budgets(予算は CLI で 1 回だけ作る。§6-2)、RDS、Elastic IP、ALB、NAT Gateway、ECR、CloudFront、Route 53。アプリの Docker イメージも、まだ載せない。
+**いま作らないもの:** S3(state 用を含む)、Budgets(予算は CLI で 1 回だけ作る。§6-2)、Elastic IP、ALB、NAT Gateway、ECR、CloudFront、Route 53。アプリの Docker イメージも、まだ載せない。
 
 **進め方(順番):**
 1. Terraform で EC2 を作り、自分の PC から `http://<公開 IP>/` が「Kokuban EC2 OK」になることを確かめる
-2. 次に DB(RDS にするか、同じサーバーのコンテナにするか)を決めて足す
+2. 次に DB を **RDS** にする(§6-5。作成と接続の確認ずみ)
 3. 最後に、フロントとバックエンドを同じサーバーへ載せる
 
 使わないときは `terraform destroy` で消してよい(データも消える)。
@@ -245,7 +245,8 @@ AI は便利ですが、**権限が大きいほど、間違いの被害も大き
 ### 6-1. 置き場所とファイル(案)
 ```
 infra/
-├─ main.tf                   # EC2、セキュリティグループ、IAM(RDS や Elastic IP は書かない)
+├─ main.tf                   # EC2、セキュリティグループ、IAM(Elastic IP は書かない)
+├─ rds.tf                    # RDS(PostgreSQL 17)、RDS 用のセキュリティグループ、パスワードを読む権限
 ├─ variables.tf              # 変更できる値(自分の IP、インスタンスの種類など)
 ├─ outputs.tf                # 作ったあとに表示する値(サーバーの住所など)
 ├─ versions.tf               # Terraform と AWS プロバイダのバージョン(state はローカル)
@@ -295,7 +296,37 @@ terraform apply       # plan どおりに作る(確認の入力が出る。人�
 | `aws_security_group` | 入ってくる通信: **自分の PC の IP だけ**から 80。出る通信: すべて可。**22(SSH)は作らない** |
 | `aws_iam_role` + instance profile | EC2 が SSM で接続するための役割。`AmazonSSMManagedInstanceCore` を付ける |
 
-**S3・Budgets・RDS・Elastic IP・DB のパスワード置き場は、Terraform では作らない。** DB は、EC2 の動作確認のあとに足す。
+**S3・Budgets・Elastic IP は、Terraform では作らない。**
+
+### 6-5. RDS(PostgreSQL 17)。EC2 からだけ接続できる(`infra/rds.tf`)
+| 部品 | 設定 | 理由 |
+|---|---|---|
+| `aws_db_instance` | PostgreSQL **17**、`db.t4g.micro`、gp3 **20GB**、暗号化あり、**1 つの AZ**、削除保護なし・最終スナップショットなし | 学習用の最小構成。開発と同じ 17 系 |
+| 公開 | **しない**(`publicly_accessible = false`) | 外から届かない(プライベート IP だけ) |
+| `aws_security_group.db` | 入り口は、**EC2 のセキュリティグループからの 5432 だけ**。IP での許可は書かない。出口なし | 「EC2 からのみ接続」 |
+| パスワード | `manage_master_user_password = true`(**RDS が作り、Secrets Manager に保管**)。コードにも state にも、値は残らない | 秘密を Git に置かない |
+| `aws_iam_role_policy` | EC2 の役割が読めるのは、**この RDS のシークレット 1 つだけ** | 最小の権限 |
+
+**接続の確認結果(2026 年 11 月。EC2 と RDS を作って、確認ずみ。作成に約 8 分):**
+| 確認 | 結果 |
+|---|---|
+| 自分の PC から RDS の 5432 へ | ✅ 届かない(時間切れ)。ホスト名は、プライベート IP(172.31.x.x)に引ける |
+| RDS の設定 | ✅ `PubliclyAccessible = false`、暗号化あり、1 つの AZ、PostgreSQL 17.9 |
+| RDS の入り口(AWS 側) | ✅ 許可元は、EC2 のセキュリティグループ 1 つだけ(CIDR なし)。出口のルールは 0 |
+| EC2 から 5432 へ TCP 接続 | ✅ 届く |
+| EC2 の役割で、パスワードを取り出す | ✅ 取り出せる。**他のシークレットの一覧は `AccessDenied`**(最小権限) |
+| EC2 から `psql` でログイン | ✅ `SELECT version()` が返る。**TLS 1.3 で暗号化**されている |
+| 書き込み・読み出し | ✅ テーブル作成・挿入・読み出しができた(最後に ROLLBACK して、何も残していない) |
+| 間違ったパスワード | ✅ `password authentication failed`(入れない) |
+
+接続のしかた(EC2 の中で。パスワードは、画面に出さずに環境変数へ入れる):
+```
+PW=$(aws secretsmanager get-secret-value --secret-id <db_secret_arn> --query SecretString --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])")
+PGPASSWORD="$PW" PGSSLMODE=require psql -h <db_address> -U kokuban -d kokuban
+```
+(`db_address` と `db_secret_arn` は、`terraform output` で出る。`psql` は、`dnf install postgresql17` で入る)
+
+**費用:** RDS は 1 時間あたり数円(`db.t4g.micro`)、ディスク 20GB とシークレット 1 つが月に数百円。**使い終わったら `terraform destroy`**(RDS は消すのに数分かかる)。
 
 ---
 
@@ -330,7 +361,7 @@ EC2 の動作確認が終わってから行う。フロントとバックエン�
 2. 【確認】いまのプラン・クレジットを確認し(§2)、作業用アカウントを作るかを決める。予算アラートを CLI で作る(§6-2)
 3. 【Terraform の土台】`infra/`(state はローカル)、`terraform plan` が通る(EC2 まで。S3・Budgets・RDS は書かない)
 4. 【サーバー】EC2・セキュリティグループ(自分の PC の IP だけ)・SSM を `apply` し、確認ページを見る
-5. 【DB】RDS にするか、同じサーバーのコンテナにするかを決めて足す
+5. 【DB】RDS を作り、EC2 からだけ接続できることを確認する(§6-5。**完了**)
 6. 【コンテナ化】`backend/Dockerfile`、nginx、本番用の `docker-compose`、設定の分け方
 7. 【デプロイ】同じサーバーにフロントとバックエンドをのせて確認
 8. 【公開の前】ログイン、HTTPS、バックアップ、チェックリスト(§7-2)
@@ -357,6 +388,6 @@ EC2 の動作確認が終わってから行う。フロントとバックエン�
 | D-02 | 独自ドメイン | 持っていなければ、まずは IP アドレスで動作確認。ログインを作る段階で、ドメインと HTTPS を用意する |
 | D-03 | 月の予算の上限 | 5 ドル(超えそうなときにメール)。CLI で 1 回だけ作る(§6-2) |
 | D-04 | 権限セット | 最初は `AdministratorAccess`(学習用)。サーバーが動いたら、絞る |
-| D-05 | 構成 | まず EC2 1 台(フロントとバックエンドは同じサーバー)。RDS は EC2 の確認のあと |
+| D-05 | 構成 | EC2 1 台(フロントとバックエンドは同じサーバー)+ RDS(PostgreSQL 17、EC2 からだけ接続)。確認ずみ |
 | D-06 | 作業用アカウントのメールアドレス | 管理用とは別のアドレスが必要。Gmail の `+kokuban` の別名が使える(§2 の「アカウントの分け方」) |
 | D-07 | 無料枠 | 利用者が確認済み。使うときだけ作り、終わったら消してよい |
