@@ -20,3 +20,21 @@ variable "allowed_cidrs" {
     error_message = "allowed_cidrs は CIDR(例: 203.0.113.10/32)で指定してください。"
   }
 }
+
+variable "db_engine_version" {
+  description = "PostgreSQL のバージョン。開発(PostgreSQL 17)と、そろえる"
+  type        = string
+  default     = "17"
+}
+
+variable "db_instance_class" {
+  description = "RDS のインスタンスの種類。学習用の最小の型"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_allocated_storage" {
+  description = "RDS のディスク(GB)。PostgreSQL の gp3 の最小は 20"
+  type        = number
+  default     = 20
+}
