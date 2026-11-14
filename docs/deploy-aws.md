@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 版 0.5(**無料の範囲に絞った最小構成**。Terraform は **EC2 と RDS まで**。RDS への接続は確認ずみ。S3・Budgets・アプリのデプロイは、Terraform の対象外) |
+| 状態 | 版 0.6(**無料の範囲に絞った最小構成**。Terraform は **EC2 と RDS まで**。RDS への接続とアプリのデプロイは確認ずみ。S3・Budgets・アプリのデプロイは、Terraform の対象外) |
 | 目的 | Kokuban を AWS 上で動かす。**マネジメントコンソール(ブラウザの管理画面)は手で触らず**、コマンド(AWS CLI と Terraform)だけで作る。AI(Claude Code)にコマンドを実行させる |
 | 対象 | 初心者。専門用語には一言の説明をつける |
 | リージョン | 東京(`ap-northeast-1`) |
@@ -332,18 +332,41 @@ PGPASSWORD="$PW" PGSSLMODE=require psql -h <db_address> -U kokuban -d kokuban
 
 ## 7. アプリをのせる(段階 5)と、公開の前のチェック
 
-### 7-1. のせ方(案。**最後の段階**)
-EC2 の動作確認が終わってから行う。フロントとバックエンドは、**同じ EC2** に載せる。
-1. バックエンドを Docker イメージにする(`backend/Dockerfile`。Java 21 で `./mvnw package` した jar を動かす)。
-2. 画面を `npm run build` して、nginx で配る(`frontend/dist`)。nginx は `/api` と `/actuator/health` を backend へ中継する。
-3. サーバー上の `docker compose` で、nginx・backend・(決めた DB)を動かす。
-4. サーバーへは、**SSM Session Manager**(`aws ssm start-session --target <インスタンス ID>`)で入る。SSH は使わない。
-5. 自分の PC から確かめる: `curl http://<公開 IP>/` が確認ページ(のちほどアプリ)。他のネットワークからは届かない。
+### 7-1. のせ方(`deploy/deploy.sh`。確認ずみ)
+**方法 A: Java 21(Amazon Corretto)で jar を直接動かす**を採用しました(Docker と Docker Compose は使いません。部品が少なく、2GB のメモリに合うため)。フロントとバックエンドは、**同じ EC2** に載せます。
+
+```
+export AWS_PROFILE=kokuban          # aws login ずみで
+./deploy/deploy.sh --seed           # 初回は --seed(確認用のテストデータを入れる)。2 回目以降は付けない
+```
+`deploy.sh` がやること(手元の Mac で実行):
+1. `infra/` の `terraform output` から、EC2 と RDS の接続先を読む。
+2. バックエンドの jar と、画面(`frontend/dist`)をビルドする。
+3. **一時的な S3 バケット**(非公開。CLI で作り、**終わったら自動で消す**)に置き、**署名つき URL(1 時間だけ有効)**を作る。
+4. SSM で EC2 に `deploy/remote-install.sh` を実行させる(**SSH は使わない**)。
+
+`remote-install.sh` がやること(EC2 の中、root):
+1. Java 21 と `psql` を入れる。
+2. RDS のパスワードを Secrets Manager から取り出し、**root だけが読めるファイル**(`/etc/kokuban/kokuban.env`、権限 600)に書く。
+3. systemd のサービス `kokuban` で jar を動かす(`-Xmx512m`、専用ユーザー、`127.0.0.1:8080` だけで待ち受け)。起動時に `schema.sql` が走る。
+4. (`--seed` のとき)`seed.sql` で、デモ利用者のデータを作り直す。
+5. nginx で、画面を配り、**`/api/` だけをバックエンドへ中継**する。`/actuator/` は外へは出さない(404)。
+
+**確認ずみ(2026 年 11 月。EC2 + RDS を作り、デプロイして、実際のブラウザで確認):**
+| 確認 | 結果 |
+|---|---|
+| 画面が開く(タブ「Taskboard Kokuban」、緑の黒板・木の枠・チョーク受け) | ✅ |
+| ボード(未着手 2 / 進行中 2 / 完了 1)が、RDS のデータで出る | ✅ |
+| カードを追加して再読み込みしても残る(= RDS に保存) | ✅ |
+| `/api/board` が 200、外向きの `/actuator/health` が 404 | ✅ |
+| 外から EC2 の 8080、22、RDS の 5432 へ | ✅ すべて届かない(時間切れ) |
+| 自分の PC から 80 番 | ✅ 200(許可した IP だけ) |
 
 **守ること(`CLAUDE.md` の「公開の範囲」との関係)**
-- DB(5432)は、**コンテナの中の通信だけ**にする(`ports:` で、サーバーの外に出さない)。
-- backend(8080)も、**外に出さない**。外から入れるのは、nginx の 80/443 だけ。
-- コンテナの中で、backend が待ち受ける住所は、`127.0.0.1` ではなく `0.0.0.0`(コンテナの中の別の部品から届くため)にする必要があります。**その代わり、`ports:` で外へ公開しない**ことで、守ります。本番用の設定(プロファイル)を分けて、ここだけ変える。
+- RDS(5432)は、**EC2 のセキュリティグループからだけ**。backend(8080)は、`127.0.0.1` だけで待ち受け、**外に出さない**(`application.properties` の `server.address` のまま)。
+- 外から入れるのは、nginx の **80 番だけ**で、**許可した自分の IP だけ**(ログインが無いため)。IP が変わったら、`terraform plan` をやり直して、許可し直す。
+- パスワードは、画面・ログ・Git に出さない。`kokuban.env` を `source` で読み込まない(記号入りのパスワードで、エラー文に出ることがある)。
+- 2 回目以降の `deploy.sh` に、`--seed` を付けない(デモ利用者のデータだけだが、作り直される)。
 
 ### 7-2. 公開の前のチェックリスト
 - [ ] **ログインを作った**(M-06 の決定が先)。作るまでは、**自分の IP だけ**を許可する。IP が変わったら、`terraform.tfvars` を直して `apply`
